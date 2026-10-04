@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -33,7 +33,7 @@ public class OnboardingPage extends BasePage {
     private final By dobDialogOkAction = text("OK");
     private final By dobDialogCancelAction = text("Cancel");
 
-    public OnboardingPage(AndroidDriver driver) {
+    public OnboardingPage(IOSDriver driver) {
         super(driver);
     }
 

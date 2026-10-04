@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 
 /** Reached from PostPage by tapping an attached image/video thumbnail
@@ -54,7 +54,7 @@ public class MediaEditorPage extends BasePage {
     private final By textOverlayCancel = accessibilityId("Cancel");
     private final By removeAudioAction = accessibilityId("Remove Audio");
 
-    public MediaEditorPage(AndroidDriver driver) {
+    public MediaEditorPage(IOSDriver driver) {
         super(driver);
     }
 

@@ -175,7 +175,7 @@ public class FeedTest extends BaseTest {
         // @Before threw, and if the session was never created driver is null - touching it
         // here raised a NullPointerException that REPLACED the real failure in the report.
         // Confirmed live: an adb outage produced 17 SessionNotCreatedExceptions, and every
-        // one of them was reported as "Cannot invoke AndroidDriver.getConnection() because
+        // one of them was reported as "Cannot invoke IOSDriver.getConnection() because
         // this.driver is null" instead, hiding the actual cause. There is no radio to
         // restore when no session exists, so return and let the original exception stand.
         if (driver == null) {

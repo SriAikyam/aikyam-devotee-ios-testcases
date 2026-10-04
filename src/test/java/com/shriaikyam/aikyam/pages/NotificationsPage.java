@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebElement;
@@ -20,7 +20,7 @@ public class NotificationsPage extends BasePage {
     private final By permissionDialogDeny = By.xpath(
             "//*[@resource-id='com.android.permissioncontroller:id/permission_deny_button']");
 
-    public NotificationsPage(AndroidDriver driver) {
+    public NotificationsPage(IOSDriver driver) {
         super(driver);
     }
 

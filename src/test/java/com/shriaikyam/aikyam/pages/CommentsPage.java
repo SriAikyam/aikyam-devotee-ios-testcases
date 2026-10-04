@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Rectangle;
 import org.openqa.selenium.WebElement;
@@ -28,7 +28,7 @@ public class CommentsPage extends BasePage {
     // first one on screen replies to whichever comment happens to render first.
     private final By replyAction = text("Reply");
 
-    public CommentsPage(AndroidDriver driver) {
+    public CommentsPage(IOSDriver driver) {
         super(driver);
     }
 

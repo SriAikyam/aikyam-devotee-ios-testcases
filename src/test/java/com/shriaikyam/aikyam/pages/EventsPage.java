@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 
@@ -35,7 +35,7 @@ public class EventsPage extends BasePage {
     private final By attendeeCountText = textContains("attendees");
     private final By scheduleHeading = text("Schedule");
 
-    public EventsPage(AndroidDriver driver) {
+    public EventsPage(IOSDriver driver) {
         super(driver);
     }
 

@@ -1,7 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import io.appium.java_client.android.connection.ConnectionStateBuilder;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Dimension;
@@ -25,7 +25,7 @@ public class FeedPage {
     private static final Duration SCROLL_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration IMPLICIT_TIMEOUT = Duration.ofSeconds(5);
 
-    private final AndroidDriver driver;
+    private final IOSDriver driver;
 
     // Bottom-nav labels are plain Text nodes with no contentDescription, so an
     // accessibility-id locator never matches them; match on visible label text.
@@ -89,7 +89,7 @@ public class FeedPage {
     private final By muteAction = AppiumBy.accessibilityId("Mute");
     private final By unmuteAction = AppiumBy.accessibilityId("Unmute");
 
-    public FeedPage(AndroidDriver driver) {
+    public FeedPage(IOSDriver driver) {
         this.driver = driver;
     }
 

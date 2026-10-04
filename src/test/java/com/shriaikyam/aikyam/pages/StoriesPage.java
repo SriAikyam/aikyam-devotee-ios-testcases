@@ -1,7 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.Rectangle;
@@ -29,9 +29,9 @@ public class StoriesPage {
     private static final Duration WAIT = Duration.ofSeconds(15);
     private static final Set<String> FIXED = Set.of("All Posts", "Temples", "Live");
 
-    private final AndroidDriver driver;
+    private final IOSDriver driver;
 
-    public StoriesPage(AndroidDriver driver) {
+    public StoriesPage(IOSDriver driver) {
         this.driver = driver;
     }
 
