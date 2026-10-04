@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
@@ -24,7 +24,7 @@ public class MediaPage extends BasePage {
     private final By commentAction = accessibilityId("Comment");
     private final By namaskaraAction = accessibilityId("Namaskara");
 
-    public MediaPage(AndroidDriver driver) {
+    public MediaPage(IOSDriver driver) {
         super(driver);
     }
 

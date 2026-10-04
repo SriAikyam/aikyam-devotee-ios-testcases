@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -28,7 +28,7 @@ public class LoginPage extends BasePage {
     // navigates back to the phone-number screen without needing to complete OTP entry.
     private final By wrongNumberAction = text("Wrong Number?");
 
-    public LoginPage(AndroidDriver driver) {
+    public LoginPage(IOSDriver driver) {
         super(driver);
     }
 

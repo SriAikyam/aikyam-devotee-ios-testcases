@@ -26,8 +26,8 @@ tasks.test {
     // device silently has no effect and every run goes to the defaults.
     listOf(
         "appium.worker",
-        "appium.appPackage",
-        "appium.appActivity",
+        "appium.bundleId",
+        "appium.platformVersion",
         "appium.deviceName",
         "appium.serverUrl",
         "appium.udid",
@@ -66,7 +66,7 @@ tasks.register<Test>("p0Smoke") {
     useJUnit { includeCategories("com.shriaikyam.aikyam.categories.P0") }
     maxHeapSize = "256m"
     jvmArgs("-XX:MaxMetaspaceSize=128m")
-    listOf("appium.worker", "appium.appPackage", "appium.appActivity", "appium.deviceName",
+    listOf("appium.worker", "appium.bundleId", "appium.platformVersion", "appium.deviceName",
         "appium.serverUrl", "appium.udid").forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }

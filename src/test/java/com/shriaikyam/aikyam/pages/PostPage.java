@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -85,7 +85,7 @@ public class PostPage extends BasePage {
     private final By micDialogPrompt = textContains("Speak your caption");
     private final By saveDraftAction = text("Save Draft");
 
-    public PostPage(AndroidDriver driver) {
+    public PostPage(IOSDriver driver) {
         super(driver);
     }
 

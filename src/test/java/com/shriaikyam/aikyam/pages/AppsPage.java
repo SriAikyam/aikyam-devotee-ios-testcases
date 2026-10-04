@@ -1,7 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 
 public class AppsPage extends BasePage {
@@ -17,7 +17,7 @@ public class AppsPage extends BasePage {
             "new UiSelector().className(\"android.webkit.WebView\")"
     );
 
-    public AppsPage(AndroidDriver driver) {
+    public AppsPage(IOSDriver driver) {
         super(driver);
     }
 

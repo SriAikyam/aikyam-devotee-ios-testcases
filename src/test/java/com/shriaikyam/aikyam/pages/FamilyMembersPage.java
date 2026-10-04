@@ -1,7 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import io.appium.java_client.android.nativekey.AndroidKey;
 import io.appium.java_client.android.nativekey.KeyEvent;
 import org.openqa.selenium.By;
@@ -47,7 +47,7 @@ public class FamilyMembersPage extends BasePage {
     private final By deleteAction = text("Delete");
     private final By updateAction = text("Update");
 
-    public FamilyMembersPage(AndroidDriver driver) {
+    public FamilyMembersPage(IOSDriver driver) {
         super(driver);
     }
 

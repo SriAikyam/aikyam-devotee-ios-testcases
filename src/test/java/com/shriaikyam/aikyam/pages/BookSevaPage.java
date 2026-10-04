@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 
@@ -64,7 +64,7 @@ public class BookSevaPage extends BasePage {
     private final By frequentReorderAction = text("Reorder");
     private final By bookingDetailsTitle = text("Booking details");
 
-    public BookSevaPage(AndroidDriver driver) {
+    public BookSevaPage(IOSDriver driver) {
         super(driver);
     }
 

@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 
 /**
@@ -22,7 +22,7 @@ public class PriestSettingsPage extends BasePage {
     // specific to one screen.
     private final By templeContextError = text("No active temple context found");
 
-    public PriestSettingsPage(AndroidDriver driver) {
+    public PriestSettingsPage(IOSDriver driver) {
         super(driver);
     }
 

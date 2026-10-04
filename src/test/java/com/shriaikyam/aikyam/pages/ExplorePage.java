@@ -1,7 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import io.appium.java_client.android.nativekey.AndroidKey;
 import io.appium.java_client.android.nativekey.KeyEvent;
 import org.openqa.selenium.By;
@@ -68,7 +68,7 @@ public class ExplorePage extends BasePage {
     private final By followAction = text("Follow");
     private final By followingAction = text("Following");
 
-    public ExplorePage(AndroidDriver driver) {
+    public ExplorePage(IOSDriver driver) {
         super(driver);
     }
 

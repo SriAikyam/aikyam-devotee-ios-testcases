@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 
@@ -23,7 +23,7 @@ public class SettingsPage extends BasePage {
     // not PostCards - the Follow/Following button is their equivalent content signal.
     private final By userListContentSignal = By.xpath("//*[@text='Follow' or @text='Following']");
 
-    public SettingsPage(AndroidDriver driver) {
+    public SettingsPage(IOSDriver driver) {
         super(driver);
     }
 

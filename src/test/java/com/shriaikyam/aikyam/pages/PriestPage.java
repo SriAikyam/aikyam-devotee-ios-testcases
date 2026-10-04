@@ -1,6 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 
 /**
@@ -36,7 +36,7 @@ public class PriestPage extends BasePage {
     private final By postComposerTab = text("Post");
     private final By eventComposerTab = text("Events");
 
-    public PriestPage(AndroidDriver driver) {
+    public PriestPage(IOSDriver driver) {
         super(driver);
     }
 

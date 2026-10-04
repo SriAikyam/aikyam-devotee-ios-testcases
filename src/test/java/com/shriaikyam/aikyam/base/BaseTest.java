@@ -3,9 +3,11 @@ package com.shriaikyam.aikyam.base;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.LoginPage;
 import com.shriaikyam.aikyam.pages.OnboardingPage;
+import com.shriaikyam.aikyam.pages.BasePage;
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
-import io.appium.java_client.android.options.UiAutomator2Options;
+import io.appium.java_client.appmanagement.ApplicationState;
+import io.appium.java_client.ios.IOSDriver;
+import io.appium.java_client.ios.options.XCUITestOptions;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestWatcher;
@@ -30,7 +32,7 @@ import java.util.Map;
 
 public abstract class BaseTest {
 
-    protected AndroidDriver driver;
+    protected IOSDriver driver;
 
     /** Phase 2 experiment. Was 5s. An implicit wait sits underneath every explicit
      * wait, so a multi-locator WebDriverWait pays it once PER LOCATOR PER POLL -
@@ -70,15 +72,10 @@ public abstract class BaseTest {
     }
 
     private static final String DEFAULT_APPIUM_SERVER_URL = "http://127.0.0.1:4723";
-    private static final String DEFAULT_DEVICE_NAME = "Android";
-    private static final String DEFAULT_APP_PACKAGE = "com.shriaikyam.aikyam.dev";
-    // A relative ".MainActivity" name resolves literally against the appPackage
-    // capability (com.shriaikyam.aikyam.dev), not this app's actual manifest package
-    // (com.shriaikyam.aikyam) - Android's component resolution doesn't know the two
-    // differ. Worked previously only because of a resolution quirk that stopped
-    // holding on this device (confirmed live: the same relative name now fails via
-    // plain adb too, independent of Appium). The fully-qualified name always resolves.
-    private static final String DEFAULT_APP_ACTIVITY = "com.shriaikyam.aikyam.MainActivity";
+    private static final String DEFAULT_DEVICE_NAME = "iPhone 16 Pro";
+    /** Dev-Debug configuration of the AikyamDevotee-Dev scheme. Never point this suite at
+     * the prod bundle (com.shriaikyam.ikyam): it writes to the account it runs as. */
+    private static final String DEFAULT_BUNDLE_ID = "com.shriaikyam.ikyam.dev";
     /** Phase 4: under a parallel shard (-Dappium.worker=N) diagnostics go to a worker-scoped
      * directory. Two shards share the same class names, so the fixed path would have them
      * overwriting each other's screenshots and page sources - the evidence we rely on to
@@ -126,26 +123,29 @@ public abstract class BaseTest {
 
     @Before
     public void setUp() throws MalformedURLException {
-        UiAutomator2Options options = new UiAutomator2Options()
+        XCUITestOptions options = new XCUITestOptions()
                 .setDeviceName(getProperty("appium.deviceName", DEFAULT_DEVICE_NAME))
-                .setAutomationName("UiAutomator2")
                 .setNoReset(true)
-                .setAutoGrantPermissions(true)
+                // Counterpart of autoGrantPermissions: accepts the system photo/camera/
+                // notification permission alerts as they appear.
+                .setAutoAcceptAlerts(true)
                 .setNewCommandTimeout(Duration.ofSeconds(120));
+        String platformVersion = getProperty("appium.platformVersion", null);
+        if (platformVersion != null) {
+            options.setPlatformVersion(platformVersion);
+        }
 
         // A BrowserStack run supplies an uploaded app id (bs://...) instead of an
         // already-installed package/activity - the two are mutually exclusive, so this
-        // branches instead of always setting appPackage/appActivity. Local/emulator
+        // branches instead of always setting bundleId. Local/simulator
         // behavior below is unchanged when appium.bstackApp is absent.
         String bstackApp = getProperty("appium.bstackApp", null);
         if (bstackApp != null && !bstackApp.isBlank()) {
             applyBrowserStackOptions(options, bstackApp);
         } else {
-            options.setAppPackage(getProperty("appium.appPackage", DEFAULT_APP_PACKAGE));
-            options.setAppActivity(getProperty("appium.appActivity", DEFAULT_APP_ACTIVITY));
+            options.setBundleId(bundleId());
 
-            // With more than one emulator/device connected, an unpinned session is
-            // ambiguous - UiAutomator2 would attach to whichever one it picks first.
+            // With more than one simulator booted, an unpinned session is ambiguous.
             String udid = System.getProperty("appium.udid");
             if (udid != null && !udid.isBlank()) {
                 options.setUdid(udid);
@@ -167,7 +167,7 @@ public abstract class BaseTest {
         }
 
         if (driver == null) {
-            driver = new AndroidDriver(
+            driver = new IOSDriver(
                     new URL(getProperty("appium.serverUrl", DEFAULT_APPIUM_SERVER_URL)),
                     options
             );
@@ -186,7 +186,7 @@ public abstract class BaseTest {
         // prior run's recovery logic backed all the way out to the home screen, or the
         // app was manually closed. Explicitly bring it to the foreground rather than
         // relying on it already being open.
-        driver.activateApp(getProperty("appium.appPackage", DEFAULT_APP_PACKAGE));
+        driver.activateApp(bundleId());
 
         // A BrowserStack real-device session starts with no persisted app state - unlike
         // a local emulator that's already past onboarding and logged in. Opt-in only
@@ -211,21 +211,21 @@ public abstract class BaseTest {
         return false;
     }
 
-    private static AndroidDriver sharedDriver;
+    private static IOSDriver sharedDriver;
 
     /** Cheap liveness probe so a dead session is rebuilt explicitly rather than carried
      * into the next test, where it would surface as a product-looking failure. */
-    private static boolean isSessionAlive(AndroidDriver candidate) {
+    private static boolean isSessionAlive(IOSDriver candidate) {
         try {
             candidate.getSessionId();
-            candidate.getCurrentPackage();
+            candidate.getWindowHandle();
             return true;
         } catch (RuntimeException dead) {
             return false;
         }
     }
 
-    private static void quitQuietly(AndroidDriver candidate) {
+    private static void quitQuietly(IOSDriver candidate) {
         try {
             candidate.quit();
             DRIVER_QUITS.incrementAndGet();
@@ -255,16 +255,15 @@ public abstract class BaseTest {
 
     private static final int MAX_BACK_ATTEMPTS = 5;
 
-    /** The persistent bottom-nav "Home" label, matching HomePage.byLabel("Home"). */
-    private static final By HOME_BOTTOM_NAV =
-            AppiumBy.androidUIAutomator("new UiSelector().text(\"Home\")");
+    /** The Home tab of AikyamCustomTabBar (MainTabView), by its stable identifier. */
+    private static final By HOME_BOTTOM_NAV = AppiumBy.accessibilityId("tab.home");
 
-    /** Button labels belonging to the Android runtime-permission dialog. None of these
-     * strings appear in the app's own UI, so matching on them cannot accidentally tap app
-     * content. "Don't allow" is deliberately absent - denying would permanently change app
-     * behaviour for every later test. */
+    /** Button labels of the iOS system permission alerts. autoAcceptAlerts normally
+     * handles these; this is the fallback for one raised mid-reset. "Don't Allow" is
+     * deliberately absent - denying would permanently change app behaviour for every
+     * later test. */
     private static final String[] PERMISSION_ALLOW_LABELS = {
-            "While using the app", "Only this time", "Allow"
+            "Allow While Using App", "Allow Full Access", "Allow Once", "Allow"
     };
 
     /** Isolation guard. With setNoReset(true) the app resumes on whatever screen the
@@ -312,21 +311,9 @@ public abstract class BaseTest {
         }
     }
 
-    /** A keyboard left open by the previous test sits over the bottom bar, so the Home tap
-     * lands on the keyboard's own toolbar instead. BACK dismisses it - but only while it is
-     * actually showing: with no keyboard, BACK would pop the current screen. Twice, because
-     * the first press can only close a keyboard popup menu. */
+    /** A keyboard left open by the previous test covers the floating tab bar. */
     private void dismissSoftKeyboardIfShown() {
-        for (int attempt = 0; attempt < 2; attempt++) {
-            try {
-                if (!driver.isKeyboardShown()) {
-                    return;
-                }
-                driver.hideKeyboard();
-            } catch (RuntimeException ignored) {
-                return;
-            }
-        }
+        BasePage.hideKeyboardIfShown(driver);
     }
 
     private boolean tapHomeIfPresent() {
@@ -338,14 +325,13 @@ public abstract class BaseTest {
         return true;
     }
 
-    /** Dismisses only the known Android runtime-permission dialog. Confirmed live: this
-     * dialog covered the entire screen during HomeTest TC004/TC008, leaving the app's own
-     * hierarchy with zero nodes - ColorOS blocks the autoGrantPermissions capability, so it
-     * can still appear mid-run despite that capability being set. */
+    /** Dismisses only an iOS system permission alert, matched as an alert button so app
+     * content with the same wording can never be tapped. */
     private void dismissKnownPermissionDialog() {
         for (String label : PERMISSION_ALLOW_LABELS) {
-            List<WebElement> buttons = driver.findElements(
-                    AppiumBy.androidUIAutomator("new UiSelector().text(\"" + label + "\")"));
+            List<WebElement> buttons = driver.findElements(AppiumBy.iOSClassChain(
+                    "**/XCUIElementTypeAlert/**/XCUIElementTypeButton[`label == "
+                            + BasePage.predicateLiteral(label).replace('\'', '"') + "`]"));
             if (!buttons.isEmpty()) {
                 try {
                     buttons.get(0).click();
@@ -377,13 +363,11 @@ public abstract class BaseTest {
      * Gated on the dialog TITLE, not the button, so a stray "Discard" label on any other
      * screen can never be tapped by this. */
     private void dismissDiscardPostDialogIfPresent() {
-        By discardTitle = AppiumBy.androidUIAutomator(
-                "new UiSelector().text(\"Discard post?\")");
+        By discardTitle = BasePage.byExactText("Discard post?");
         if (driver.findElements(discardTitle).isEmpty()) {
             return;
         }
-        List<WebElement> confirm = driver.findElements(
-                AppiumBy.androidUIAutomator("new UiSelector().text(\"Discard\")"));
+        List<WebElement> confirm = driver.findElements(BasePage.byExactText("Discard"));
         if (confirm.isEmpty()) {
             return;
         }
@@ -394,32 +378,22 @@ public abstract class BaseTest {
         }
     }
 
-    /** Back, but tolerant of the app not being frontmost - a gallery or speech picker runs
-     * in another package, where back would act on that app instead of ours. */
+    /** Back, but tolerant of the app not being frontmost - the photo picker and share
+     * sheet run out of process on iOS, where our back controls do not exist. */
     private void navigateBackQuietly() {
-        String expectedPackage = getProperty("appium.appPackage", DEFAULT_APP_PACKAGE);
         try {
-            String currentPackage = driver.getCurrentPackage();
-            if (currentPackage != null && !currentPackage.equals(expectedPackage)) {
-                // Back FIRST, re-activate only if that actually left the app. Confirmed
-                // live: the gallery/file picker is started by the app and lives in the
-                // app's OWN task, so activateApp() alone re-surfaces that task with the
-                // picker still on top - it dismisses nothing, and every retry repeats the
-                // same no-op. That stranded 34 PostTest tests behind the picker and every
-                // SearchTest that ran after them.
-                driver.navigate().back();
-                String afterBack = driver.getCurrentPackage();
-                if (afterBack != null && !afterBack.equals(expectedPackage)) {
-                    // Back exited to a launcher, or the picker really was in its own task -
-                    // pull the app forward and let the next iteration re-check.
-                    driver.activateApp(expectedPackage);
-                }
+            if (driver.queryAppState(bundleId()) != ApplicationState.RUNNING_IN_FOREGROUND) {
+                driver.activateApp(bundleId());
                 return;
             }
-            driver.navigate().back();
+            BasePage.navigateBack(driver);
         } catch (RuntimeException ignored) {
-            // Some states don't support back; the next visibility check governs the retry.
+            // The next visibility check governs the retry.
         }
+    }
+
+    protected String bundleId() {
+        return getProperty("appium.bundleId", DEFAULT_BUNDLE_ID);
     }
 
     /** Drives the app from a genuinely fresh install (first-run language picker, then
@@ -502,10 +476,9 @@ public abstract class BaseTest {
      * a blind tap there would submit that form with blank required fields before
      * establishAuthenticatedSession() gets a chance to fill it in properly. */
     private void dismissFirstRunLanguagePickerIfPresent() {
-        By languageScreenAnchor = AppiumBy.androidUIAutomator(
-                "new UiSelector().textContains(\"Pick your language\")"
-        );
-        By continueAction = AppiumBy.androidUIAutomator("new UiSelector().text(\"Continue\")");
+        By languageScreenAnchor = AppiumBy.iOSNsPredicateString(
+                "label CONTAINS 'Pick your language'");
+        By continueAction = BasePage.byExactText("Continue");
         try {
             List<WebElement> anchorMatches = driver.findElements(languageScreenAnchor);
             if (anchorMatches.isEmpty() || !anchorMatches.get(0).isDisplayed()) {
@@ -583,8 +556,8 @@ public abstract class BaseTest {
     /** Credentials come from BROWSERSTACK_USERNAME/BROWSERSTACK_ACCESS_KEY environment
      * variables only - never a -D system property (which shows up in process listings
      * and shell history) and never hardcoded. Fails fast with a clear message rather
-     * than letting AndroidDriver's constructor produce an opaque auth error. */
-    private void applyBrowserStackOptions(UiAutomator2Options options, String bstackApp) {
+     * than letting IOSDriver's constructor produce an opaque auth error. */
+    private void applyBrowserStackOptions(XCUITestOptions options, String bstackApp) {
         String username = System.getenv("BROWSERSTACK_USERNAME");
         String accessKey = System.getenv("BROWSERSTACK_ACCESS_KEY");
         if (username == null || username.isBlank() || accessKey == null || accessKey.isBlank()) {
@@ -598,8 +571,8 @@ public abstract class BaseTest {
         bstackOptions.put("accessKey", accessKey);
         bstackOptions.put("deviceName", getProperty("appium.deviceName", DEFAULT_DEVICE_NAME));
         bstackOptions.put("osVersion", getProperty("appium.osVersion", ""));
-        bstackOptions.put("projectName", getProperty("appium.bstackProject", "Aikyam Devotee Android"));
-        bstackOptions.put("buildName", getProperty("appium.bstackBuild", "browserstack-poc-1.6.1"));
+        bstackOptions.put("projectName", getProperty("appium.bstackProject", "Aikyam Devotee iOS"));
+        bstackOptions.put("buildName", getProperty("appium.bstackBuild", "ios-appium"));
         bstackOptions.put("sessionName", getProperty("appium.bstackSession", "BrowserStack POC"));
         bstackOptions.put("realMobile", "true");
 

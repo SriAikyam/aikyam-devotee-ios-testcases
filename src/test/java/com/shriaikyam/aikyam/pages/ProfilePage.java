@@ -1,7 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.Point;
@@ -105,7 +105,7 @@ public class ProfilePage extends BasePage {
     // via" action is dead code (confirmed: zero nav graph references), not this one.
     private final By shareAction = accessibilityId("Share");
 
-    public ProfilePage(AndroidDriver driver) {
+    public ProfilePage(IOSDriver driver) {
         super(driver);
     }
 

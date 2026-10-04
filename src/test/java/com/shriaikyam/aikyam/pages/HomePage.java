@@ -1,8 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import com.shriaikyam.aikyam.utils.WaitUtils;
-import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 
@@ -11,23 +10,24 @@ import java.util.List;
 
 public class HomePage extends BasePage {
 
-    // Bottom nav labels are plain Compose Text nodes with no contentDescription
-    // (content-desc is empty in the accessibility tree), so accessibility-id
-    // locators never match. Match on the visible label text instead.
-    private final By homeBottomNav = byLabel("Home");
-    private final By sevasBottomNav = byLabel("Sevas");
-    private final By exploreBottomNav = byLabel("Explore");
-    private final By musicBottomNav = byLabel("Music");
-    private final By appsBottomNav = byLabel("Apps");
+    // AikyamCustomTabBar buttons carry locale-independent identifiers (set in
+    // MainTabView.tabBarItems); their labels are localized.
+    private final By homeBottomNav = id("tab.home");
+    // iOS has no Sevas tab: Book Seva is on hold on both platforms. Kept so the
+    // on-hold API matches Android; nothing in the active suite asserts it is visible.
+    private final By sevasBottomNav = id("tab.sevas");
+    private final By exploreBottomNav = id("tab.explore");
+    private final By musicBottomNav = id("tab.music");
+    private final By appsBottomNav = id("tab.apps");
     // Confirmed live: the bottom nav's fifth slot currently reads "Events", not
     // "Sevas" - Book Seva is on hold by a deliberate product decision (see
     // BookSevaTest's class-level @Ignore), and this is what occupies that slot in
     // its place today. Added alongside sevasBottomNav rather than replacing it, same
     // as the rest of this codebase keeps on-hold locators intact instead of deleting
     // them - re-enable is a one-line swap back if Sevas returns to this slot.
-    private final By eventsBottomNav = byLabel("Events");
+    private final By eventsBottomNav = id("tab.events");
 
-    public HomePage(AndroidDriver driver) {
+    public HomePage(IOSDriver driver) {
         super(driver);
     }
 
@@ -133,15 +133,9 @@ public class HomePage extends BasePage {
         return WaitUtils.isVisible(driver, locator, DEFAULT_TIMEOUT);
     }
 
-    /** A real touch on the clickable nav item, not click() on its label. The labels are
-     * non-clickable Compose Text nodes sitting in the last ~30px of the screen; see
-     * BasePage.clickableAncestorOf for why either of those alone breaks the tap.
-     * Confirmed live: TC014 stayed on Apps through two Home taps, and once the dispatch
-     * was fixed but the tap still landed on the label, TC011/TC013 stayed on Home. */
     private void tap(By locator) {
         ensureBottomNavigationReachable();
-        WebElement label = WaitUtils.waitForVisibility(driver, locator, DEFAULT_TIMEOUT);
-        tapElementCenter(clickableAncestorOf(label));
+        WaitUtils.waitForVisibility(driver, locator, DEFAULT_TIMEOUT).click();
         WaitUtils.waitForVisibility(driver, homeBottomNav, DEFAULT_TIMEOUT);
     }
 
@@ -155,19 +149,10 @@ public class HomePage extends BasePage {
         Duration shortCheck = Duration.ofSeconds(2);
         for (int attempt = 0; attempt < 6 && !WaitUtils.isVisible(driver, homeBottomNav, shortCheck); attempt++) {
             try {
-                driver.navigate().back();
+                navigateBack();
             } catch (RuntimeException ignored) {
                 break;
             }
         }
-    }
-
-    /** Matches the label, not the clickable nav item wrapping it - tap() walks up via
-     * BasePage.clickableAncestorOf. Locating the item directly with
-     * "//*[@clickable='true'][.//*[@text='...']]" reads better and was tried, but
-     * UiAutomator2's XPath engine never matches that nested-predicate form: all 15
-     * HomeTest cases timed out on it and the run took twice as long. */
-    private static By byLabel(String label) {
-        return AppiumBy.androidUIAutomator("new UiSelector().text(\"" + label + "\")");
     }
 }

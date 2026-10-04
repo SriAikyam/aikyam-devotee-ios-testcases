@@ -1,7 +1,7 @@
 package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebElement;
@@ -58,7 +58,7 @@ public class MusicPage extends BasePage {
     // that we actually landed here instead.
     private final By playSectionAction = AppiumBy.androidUIAutomator("new UiSelector().text(\"Play\")");
 
-    public MusicPage(AndroidDriver driver) {
+    public MusicPage(IOSDriver driver) {
         super(driver);
     }
 

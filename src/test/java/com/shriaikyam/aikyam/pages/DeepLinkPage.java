@@ -1,54 +1,44 @@
 package com.shriaikyam.aikyam.pages;
 
-import com.shriaikyam.aikyam.utils.AdbBridge;
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
-import java.io.IOException;
 import java.time.Duration;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Fires deep links at the DEV app only and reads the screen they land on. */
 public class DeepLinkPage extends BasePage {
 
-    public static final String DEV_PACKAGE = "com.shriaikyam.aikyam.dev";
+    /** Dev-Debug bundle only. The deep link is routed to this bundle explicitly, so it can
+     * never open the prod app even when both are installed on the simulator. */
+    public static final String DEV_BUNDLE_ID = System.getProperty("appium.bundleId", "com.shriaikyam.ikyam.dev");
     private static final Pattern SHORT_LINK = Pattern.compile("https://\\S+/p/[A-Za-z0-9_-]+");
 
-    public DeepLinkPage(AndroidDriver driver) {
+    public DeepLinkPage(IOSDriver driver) {
         super(driver);
     }
 
-    private static boolean adb(String... args) {
-        String[] cmd = new String[args.length + 1];
-        cmd[0] = AdbBridge.adbExecutable();
-        System.arraycopy(args, 0, cmd, 1, args.length);
+    public boolean fire(String url) {
         try {
-            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-            p.getInputStream().readAllBytes();
-            return p.waitFor() == 0;
-        } catch (IOException | InterruptedException e) {
+            driver.executeScript("mobile: deepLink", Map.of("url", url, "bundleId", DEV_BUNDLE_ID));
+            return true;
+        } catch (RuntimeException e) {
             return false;
         }
     }
 
-    private static String device() {
-        String udid = System.getProperty("appium.udid");
-        return udid == null || udid.isBlank() ? "emulator-5554" : udid;
-    }
-
-    /** VIEW intent pinned to the dev package so it can never reach another app or prod. */
-    public boolean fire(String url) {
-        return adb("-s", device(), "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW",
-                "-d", "'" + url + "'", DEV_PACKAGE);
-    }
-
-    /** Dev package only; app data (and so the login) is kept. */
+    /** Dev bundle only; app data (and so the login) is kept. */
     public boolean forceStopApp() {
-        return adb("-s", device(), "shell", "am", "force-stop", DEV_PACKAGE);
+        try {
+            return driver.terminateApp(DEV_BUNDLE_ID);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /** Reads the share link out of the open native chooser's preview, or null. */
@@ -56,16 +46,18 @@ public class DeepLinkPage extends BasePage {
         try {
             WebElement el = new WebDriverWait(driver, SHORT_TIMEOUT).ignoring(StaleElementReferenceException.class)
                     .until(d -> d.findElements(textContains("shriaikyam.com/p/")).stream().findFirst().orElse(null));
-            Matcher m = SHORT_LINK.matcher(el.getText());
+            String label = el.getAttribute("label");
+            Matcher m = SHORT_LINK.matcher(label == null ? el.getText() : label);
             return m.find() ? m.group() : null;
         } catch (RuntimeException e) {
             return null;
         }
     }
 
+    /** UIActivityViewController's close control; falls back to swiping the sheet down. */
     public boolean closeShareSheet() {
         try {
-            driver.navigate().back();
+            navigateBack();
             return true;
         } catch (RuntimeException e) {
             return false;
@@ -105,8 +97,8 @@ public class DeepLinkPage extends BasePage {
     public String firstHandle() {
         try {
             return new WebDriverWait(driver, SHORT_TIMEOUT).ignoring(StaleElementReferenceException.class)
-                    .until(d -> d.findElements(By.className("android.widget.TextView")).stream()
-                            .filter(WebElement::isDisplayed).map(WebElement::getText)
+                    .until(d -> d.findElements(By.className("XCUIElementTypeStaticText")).stream()
+                            .filter(WebElement::isDisplayed).map(e -> e.getAttribute("label"))
                             .filter(t -> t != null && t.startsWith("@")).findFirst().orElse(null));
         } catch (RuntimeException e) {
             return null;
@@ -124,14 +116,14 @@ public class DeepLinkPage extends BasePage {
             if (isHomeFeedShown(Duration.ofSeconds(1))) {
                 return;
             }
-            if (isShown(text("Home"))) {
+            if (isShown(id("tab.home"))) {
                 new HomePage(driver).tapHomeTab();
                 if (isHomeFeedShown(Duration.ofSeconds(3))) {
                     return;
                 }
             } else {
                 try {
-                    driver.navigate().back();
+                    navigateBack();
                 } catch (RuntimeException ignored) {
                     return;
                 }
