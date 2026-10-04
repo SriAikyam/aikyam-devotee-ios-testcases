@@ -339,7 +339,7 @@ public class FeedPage {
         }
         String[] parts = label.split(", ");
         String last = parts[parts.length - 1].trim();
-        return parts.length > 1 && COUNT.matcher(last).matches() ? last : "";
+        return COUNT.matcher(last).matches() ? last : "";
     }
 
     /** A FeedPostRow header button's label is the avatar initial, the display name, then the
