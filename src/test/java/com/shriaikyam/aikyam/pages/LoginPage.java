@@ -1,47 +1,33 @@
 package com.shriaikyam.aikyam.pages;
 
+import io.appium.java_client.appmanagement.ApplicationState;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
-import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
-import java.time.Duration;
-import java.util.List;
-
+/** LoginView: PhoneNumberContentView, then VerifyOtpContentView in place once an OTP is
+ * requested. "Verify your number" is shown on BOTH steps, so the steps are told apart by
+ * their own controls (phone field / send button vs. the hidden OTP field). */
 public class LoginPage extends BasePage {
 
-    private final By phoneNumberScreenAnchor = textContains("Verify your number");
-    private final By sendVerificationCodeAction = text("Send Verification Code");
+    private final By phoneField = id("login.phone.field");
+    private final By sendVerificationCodeAction = id("login.sendCode");
+    private final By otpField = id("login.otp.field");
     private final By verificationSentToAnchor = textContains("sent the verification code");
-    private final By otpEditText = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().className(\"android.widget.EditText\")"
-    );
-    private final By verifyingIndicator = textContains("Verifying");
-    // Android's native SMS User Consent bottom sheet (rendered by Google Play Services,
-    // not the app's own Compose UI) no longer appears on this device/Android version -
-    // OTP autofill is now an inline keyboard suggestion instead, which Appium can't act
-    // on. The OTP is read from the SMS inbox directly (DeviceSmsReader) and typed in;
-    // "Deny" clears the dialog out of the way first on the rare case it still shows.
-    private final By smsConsentDenyAction = text("Deny");
-    private final By backAction = accessibilityId("Back");
-    // R.string.wrong_number ("Wrong Number?") - a plain text link on the OTP screen,
-    // navigates back to the phone-number screen without needing to complete OTP entry.
-    private final By wrongNumberAction = text("Wrong Number?");
+    private final By verifyingIndicator = id("login.verifying");
+    private final By backAction = id("login.otp.back");
+    private final By wrongNumberAction = id("login.otp.wrongNumber");
 
     public LoginPage(IOSDriver driver) {
         super(driver);
     }
 
     public boolean isPhoneNumberScreenVisible() {
-        return isAnyVisible(phoneNumberScreenAnchor, sendVerificationCodeAction);
+        return isAnyVisible(phoneField, sendVerificationCodeAction);
     }
 
-    /**
-     * The phone number field has no contentDescription; it is the only editable
-     * text field on this screen, so a bare EditText-class locator is unambiguous here.
-     */
     public boolean enterPhoneNumber(String phoneNumber) {
-        return typeIntoFirstVisible(phoneNumber, otpEditText);
+        return typeIntoFirstVisible(phoneNumber, phoneField);
     }
 
     public boolean tapSendVerificationCode() {
@@ -50,7 +36,7 @@ public class LoginPage extends BasePage {
 
     public boolean waitForOtpScreen() {
         try {
-            waitForAnyVisible(verificationSentToAnchor, otpEditText);
+            waitForAnyVisible(verificationSentToAnchor, otpField, wrongNumberAction);
             return true;
         } catch (RuntimeException exception) {
             return false;
@@ -58,27 +44,19 @@ public class LoginPage extends BasePage {
     }
 
     public boolean isOtpScreenVisible() {
-        return isAnyVisible(verificationSentToAnchor, otpEditText);
+        return isAnyVisible(verificationSentToAnchor, otpField, wrongNumberAction);
     }
 
-    /**
-     * Entering all 6 digits auto-triggers verification after a short delay - no submit
-     * button to tap.
-     */
+    /** The six boxes are drawn over one near-transparent TextField; six digits auto-verify,
+     * there is no submit button. The OTP itself comes from AIKYAM_TEST_OTP only. */
     public boolean enterOtp(String otp) {
-        return typeIntoFirstVisible(otp, otpEditText);
+        return typeIntoFirstVisible(otp, otpField);
     }
 
-    /**
-     * Clears the SMS consent dialog out of the way (if it happens to be showing) so it
-     * doesn't block typing into the app's own OTP field. Not a wait - just a one-shot
-     * check, used only once the OTP is already known via DeviceSmsReader.
-     */
+    /** iOS: there is no SMS consent sheet - the code is offered as a keyboard suggestion
+     * via textContentType(.oneTimeCode), which needs no dismissal. */
     public boolean dismissSmsConsentIfPresent() {
-        if (!isAnyVisible(smsConsentDenyAction)) {
-            return true;
-        }
-        return tapFirstVisible(smsConsentDenyAction);
+        return true;
     }
 
     public boolean tapWrongNumber() {
@@ -88,7 +66,7 @@ public class LoginPage extends BasePage {
     public boolean waitForDashboard(FeedPage feedPage) {
         try {
             new WebDriverWait(driver, DEFAULT_TIMEOUT).until(ignored -> {
-                if (isAnyVisible(verifyingIndicator)) {
+                if (isVisibleNow(verifyingIndicator)) {
                     return false;
                 }
                 return feedPage.isAnyFeedItemVisible() || feedPage.hasNonBlankPageSource();
@@ -99,23 +77,24 @@ public class LoginPage extends BasePage {
         }
     }
 
-    /** Taps the top-left Back arrow on the OTP screen as fast as possible, back-to-back,
-     * with no wait between taps - used to probe for a rapid-tap crash. */
+    /** Taps the OTP screen's top-left back arrow back-to-back with no wait between taps -
+     * used to probe for a rapid-tap crash. */
     public void rapidTapBack(int times) {
         for (int i = 0; i < times; i++) {
             tapFirstVisible(backAction);
         }
     }
 
-    /** True if the app process is still alive and responsive (not crashed) after a
-     * disruptive action like rapid back-button tapping. */
+    /** True if the app is still in the foreground with a non-empty tree (not crashed)
+     * after a disruptive action like rapid back-button tapping. */
     public boolean isAppResponsive() {
         try {
-            Object appPackage = driver.getCapabilities().getCapability("appium:appPackage");
-            String expectedPackage = appPackage != null ? appPackage.toString() : "com.shriaikyam.aikyam.dev";
-            return expectedPackage.equals(driver.getCurrentPackage())
-                    && driver.getPageSource() != null
-                    && !driver.getPageSource().isBlank();
+            Object bundle = driver.getCapabilities().getCapability("appium:bundleId");
+            String bundleId = bundle != null ? bundle.toString() : DeepLinkPage.DEV_BUNDLE_ID;
+            String source = driver.getPageSource();
+            return driver.queryAppState(bundleId) == ApplicationState.RUNNING_IN_FOREGROUND
+                    && source != null
+                    && !source.isBlank();
         } catch (RuntimeException exception) {
             return false;
         }

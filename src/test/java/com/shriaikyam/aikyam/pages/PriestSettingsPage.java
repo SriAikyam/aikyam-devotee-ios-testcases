@@ -4,30 +4,31 @@ import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 
 /**
- * The priest/temple account's own Settings screen (reached via the temple avatar, same
- * position as {@link SettingsPage#openSettingsHub()} on the devotee side) - distinct
- * content from the devotee Settings hub, so kept as its own page object rather than
- * folded into {@link SettingsPage}. Discovered during exploratory QA; not previously
- * automated.
+ * The priest/temple account's own Settings screen (PriestSettingsView, reached via the
+ * temple avatar, same position as {@link SettingsPage#openSettingsHub()} on the devotee
+ * side) - distinct content from the devotee Settings hub, so kept as its own page object
+ * rather than folded into {@link SettingsPage}.
  */
 public class PriestSettingsPage extends BasePage {
 
-    private final By orderHistoryRow = text("Order History");
-    private final By yourPostsRow = text("Your Posts");
+    // PriestSettingsView rows are Buttons whose label combines title and subtitle, so the
+    // ids are the reliable handle; the title text is kept as a fallback.
+    private final By orderHistoryRow = id("priest.settings.orderhistory");
+    private final By yourPostsRow = id("priest.settings.yourposts");
+    private final By assignRolesRow = id("priest.settings.assignroles");
+    private final By switchAccountHeader = id("priest.settings.switchaccount");
     private final By comingSoonBadge = textContains("Coming Soon");
 
-    // Confirmed defect signal, same as PriestPage.isTempleContextErrorVisible() - this
-    // screen's Order History reproduces the identical error independently of the
-    // Orders tab, which is what confirms the bug is data-path-scoped rather than
-    // specific to one screen.
-    private final By templeContextError = text("No active temple context found");
+    // Same defect signal as PriestPage.isTempleContextErrorVisible(), rendered here by
+    // TempleSevaOrdersListView (Order History). iOS copy is "No active temple context".
+    private final By templeContextError = textContains("No active temple context");
 
     public PriestSettingsPage(IOSDriver driver) {
         super(driver);
     }
 
     public boolean isSettingsScreenVisible() {
-        return isAnyVisible(text("Switch account"));
+        return isAnyVisible(switchAccountHeader, text("Switch account"));
     }
 
     public boolean openOrderHistory() {
@@ -42,12 +43,14 @@ public class PriestSettingsPage extends BasePage {
         return scrollUntilVisible(yourPostsRow) && tapFirstVisible(yourPostsRow);
     }
 
+    /** MyPostsScreen's empty state reads "No posts yet" on iOS. */
     public boolean isYourPostsEmptyStateVisible() {
-        return isAnyVisible(text("No Posts"));
+        return isAnyVisible(text("No posts yet"), text("No Posts"));
     }
 
+    /** The Assign Roles row's combined label carries its own "Coming Soon" badge text. */
     public boolean isAssignRolesComingSoon() {
-        return scrollUntilVisible(text("Assign Roles")) && isComingSoonBadgeVisible();
+        return scrollUntilVisible(assignRolesRow) && isComingSoonBadgeVisible();
     }
 
     public boolean isComingSoonBadgeVisible() {

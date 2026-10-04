@@ -4,16 +4,11 @@ import com.shriaikyam.aikyam.base.BaseTest;
 import com.shriaikyam.aikyam.pages.CommentsPage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.HomePage;
-import io.appium.java_client.AppiumBy;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import com.shriaikyam.aikyam.categories.P0;
-import org.openqa.selenium.Rectangle;
-import org.openqa.selenium.WebElement;
-
-import java.util.List;
 
 /** Comment lifecycle journeys. Every test creates its own uniquely-tagged comment and
  * deletes it in a finally block, verifying the deletion. */
@@ -58,30 +53,9 @@ public class CommentsJourneyTest extends BaseTest {
                 comments.waitForCommentToDisappear(text));
     }
 
-    /** Count shown next to the first visible Comment icon; absent label means 0 (the app
-     * hides the count when it is zero). */
+    /** Count shown next to the first visible Comment icon; 0 when the app hides it (zero). */
     private int firstCommentCount() {
-        List<WebElement> icons = driver.findElements(AppiumBy.accessibilityId("Comment"));
-        WebElement icon = null;
-        for (WebElement e : icons) {
-            if (e.isDisplayed()) {
-                icon = e;
-                break;
-            }
-        }
-        Assert.assertNotNull("Comment icon should be visible on the feed", icon);
-        Rectangle ir = icon.getRect();
-        int iconCy = ir.getY() + ir.getHeight() / 2;
-        for (WebElement t : driver.findElements(AppiumBy.androidUIAutomator(
-                "new UiSelector().textMatches(\"^[0-9]+$\")"))) {
-            Rectangle r = t.getRect();
-            int cy = r.getY() + r.getHeight() / 2;
-            if (Math.abs(cy - iconCy) < ir.getHeight() && r.getX() >= ir.getX()
-                    && r.getX() - ir.getX() < 250) {
-                return Integer.parseInt(t.getText().trim());
-            }
-        }
-        return 0;
+        return feed.firstVisibleCommentCount();
     }
 
     @Category(P0.class)

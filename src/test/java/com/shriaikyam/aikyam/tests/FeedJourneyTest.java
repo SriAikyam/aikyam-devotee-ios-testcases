@@ -1,6 +1,7 @@
 package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.HomePage;
 import com.shriaikyam.aikyam.pages.ProfilePage;
@@ -29,8 +30,8 @@ public class FeedJourneyTest extends BaseTest {
         feedPage.tapAllPostsFilter();
     }
 
-    /** Saved state is not exposed on the icon (content-desc stays "Save"), so the proof
-     * that a save took effect is the post appearing under Settings > Saved Posts. */
+    /** The bookmark's saved state is only a tint/icon swap, so the proof that a save took
+     * effect is the post appearing under Settings > Saved Posts. */
     @Category(P0.class)
     @Test
     public void TC180_Verify_Saved_Post_Appears_In_Saved_Posts_And_Unsave_Removes_It() {
@@ -197,8 +198,8 @@ public class FeedJourneyTest extends BaseTest {
     }
 
     private void backToFeed() {
-        driver.navigate().back();
-        driver.navigate().back();
+        BasePage.navigateBack(driver);
+        BasePage.navigateBack(driver);
         new HomePage(driver).tapHomeTab();
         new FeedPage(driver).waitUntilLoaded();
     }

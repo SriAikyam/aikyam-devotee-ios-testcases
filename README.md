@@ -1,44 +1,54 @@
-# Aikyam Devotee Android - Appium Test Cases
+# Aikyam Devotee iOS - Appium Test Cases
 
-Automated UI tests for the Aikyam devotee Android app (Java 17, JUnit 4, Gradle, Appium 3 with UiAutomator2).
+Automated UI tests for the Aikyam devotee iOS app (Java 17, JUnit 4, Gradle, Appium 3 with the
+XCUITest driver).
 
-**`main` contains only tests that have been run and pass.** Tests that fail, are blocked by
-data or environment, or are not yet verified are developed on other branches and are merged
-here once they pass.
+This suite is a port of the Android suite in
+[aikyam-devotee-android-testcases](https://github.com/SriAikyam/aikyam-devotee-android-testcases)
+(`main`, only verified-passing tests). The test classes and page-object APIs are the same;
+the page objects locate iOS elements, mostly through `accessibilityIdentifier`s set in the
+SwiftUI views (`<screen>.<element>`, e.g. `tab.home`, `feed.post.like`).
 
 ## Requirements
 
+- macOS with Xcode and an iOS simulator (default: `iPhone 17 Pro`)
 - JDK 17+
-- Appium 3.x server with the UiAutomator2 driver (default `http://127.0.0.1:4723`)
-- Android SDK with `ANDROID_HOME` set
-- An emulator or device with the **dev** build installed (`com.shriaikyam.aikyam.dev`) and
-  already logged in. The tests never log in and never touch the prod build.
+- Appium 3.x with the XCUITest driver (`appium driver install xcuitest`), default
+  `http://127.0.0.1:4723`
+- The **Dev-Debug** build (`AikyamDevotee-Dev` scheme, bundle `com.shriaikyam.ikyam.dev`)
+  installed on the simulator and already logged in. Never run against the prod bundle.
+
+## Build and install the app (from the repo root, on latest `main`)
+
+```bash
+xcodebuild -project AikyamDevotee.xcodeproj -scheme AikyamDevotee-Dev \
+  -configuration Dev-Debug -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -derivedDataPath build/DerivedData build
+xcrun simctl boot "iPhone 17 Pro"; open -a Simulator
+xcrun simctl install booted "build/DerivedData/Build/Products/Dev-Debug-iphonesimulator/Aikyam Devotee.app"
+```
+
+Log in once on the simulator with the test account; tests never log in themselves.
 
 ## Run
 
 ```bash
-./gradlew p0Smoke -Dappium.udid=<device-serial>   # build-gate smoke suite
-./gradlew test    -Dappium.udid=<device-serial>   # every test on main
+cd AppiumTests
+./gradlew p0Smoke -Dappium.udid=<simulator-udid>   # smoke suite
+./gradlew test    -Dappium.udid=<simulator-udid>   # every test
 ```
 
-Optional properties: `appium.serverUrl`, `appium.appPackage`, `appium.worker`.
+Optional properties: `appium.serverUrl`, `appium.bundleId`, `appium.deviceName`,
+`appium.platformVersion`, `appium.worker`.
 
-Gradle prints only failures, so read the verdict from the JUnit XML in
-`build/test-results/<task>/`. Failure screenshots and page sources are saved to
-`build/test-results/diagnostics/<TestClass>/`.
-
-## Layout
-
-- `src/test/java/.../base/BaseTest.java` - session handling, reset to Home before every test
-- `src/test/java/.../pages/` - page objects
-- `src/test/java/.../tests/` - test classes (`*JourneyTest` are end-to-end user journeys;
-  tests tagged `@Category(P0.class)` form the smoke suite)
-- `src/test/java/.../utils/` - adb helpers
-- `docs/` - design notes
+Read the verdict from the JUnit XML in `build/test-results/<task>/`. Failure screenshots and
+page sources are saved to `build/test-results/diagnostics/<TestClass>/`.
 
 ## Conventions
 
+- Add an `.accessibilityIdentifier` in the SwiftUI view rather than matching on visible text;
+  labels are localized (English, Kannada, Hindi, Tamil, Telugu).
 - Every test asserts a real outcome and undoes any account change it makes.
-- No credentials in git. Read them from the environment: `AIKYAM_TEST_PHONE`,
-  `AIKYAM_TEST_OTP`, `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY`.
+- No credentials in git: `AIKYAM_TEST_PHONE`, `AIKYAM_TEST_OTP`, `BROWSERSTACK_USERNAME`,
+  `BROWSERSTACK_ACCESS_KEY` come from the environment.
 - Do not add `@Ignore` or loosen an assertion to get a green run.

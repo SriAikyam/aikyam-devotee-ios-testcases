@@ -1,6 +1,7 @@
 package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.DeepLinkPage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.HomePage;
@@ -15,14 +16,14 @@ import java.time.Duration;
 /**
  * Deep / shared link journeys. Real link: the feed's Share sheet previews the short link
  * the app mints (https://api-dev.shriaikyam.com/p/&lt;code&gt;); that exact link is fired back
- * at the dev package. Every link is sent with an explicit package.
- * Link formats come from AndroidManifest.xml intent-filters and core/share/ShareLinkRouter.kt.
+ * at the dev bundle. Every link is sent with an explicit bundle id (DeepLinkPage.fire).
  */
 public class DeepLinkJourneyTest extends BaseTest {
 
     private static final Duration LAND = Duration.ofSeconds(30);
     private static final String POST_ERROR = "Unable to load this shared post.";
-    private static final String COMPOSER = "Add a comment...";
+    /** PostDetailView's inline comment composer - only the post detail screen has it. */
+    private static final String COMPOSER = "postDetail.commentInput";
 
     private DeepLinkPage links;
 
@@ -51,7 +52,6 @@ public class DeepLinkJourneyTest extends BaseTest {
         FeedPage feed = new FeedPage(driver);
         String author = waitForFirstPostAuthor(feed);
         Assert.assertNotNull("First post author must be readable", author);
-        author = author.split(" \u00b7")[0].trim(); // "@handle . 3d ago" -> "@handle"
         Assert.assertTrue("Share must be tappable", feed.tapFirstShareAction());
         String link = links.readLinkFromShareSheet();
         links.closeShareSheet();
@@ -78,7 +78,7 @@ public class DeepLinkJourneyTest extends BaseTest {
     }
 
     private void assertPostOpen(String author) {
-        Assert.assertTrue("Link must open the post detail (composer shown)", links.waitForText(COMPOSER, LAND));
+        Assert.assertTrue("Link must open the post detail (composer shown)", links.waitFor(links.byDesc(COMPOSER), LAND));
         Assert.assertTrue("Opened post must be by " + author, links.isShown(links.byContainsText(author)));
     }
 
@@ -87,7 +87,7 @@ public class DeepLinkJourneyTest extends BaseTest {
         String[] shared = shareFirstPost();
         Assert.assertTrue(links.fire(shared[0]));
         assertPostOpen(shared[1]);
-        driver.navigate().back();
+        BasePage.navigateBack(driver);
         Assert.assertTrue("Back must return to the Home feed", links.isHomeFeedShown(Duration.ofSeconds(15)));
     }
 
@@ -98,7 +98,7 @@ public class DeepLinkJourneyTest extends BaseTest {
         Assert.assertTrue(links.fire(shared[0]));
         assertPostOpen(shared[1]);
         Assert.assertFalse("Must not be sent to login", links.isShown(links.byContainsText("Enter your phone")));
-        driver.navigate().back();
+        BasePage.navigateBack(driver);
         Assert.assertTrue("Back must reach the Home feed", links.isHomeFeedShown(Duration.ofSeconds(20)));
     }
 
@@ -115,7 +115,7 @@ public class DeepLinkJourneyTest extends BaseTest {
         Assert.assertTrue(links.fire("https://api-dev.shriaikyam.com/p/zzzzzzzzzz"));
         Assert.assertTrue("Unresolvable short link must leave the Home feed showing",
                 links.isHomeFeedShown(Duration.ofSeconds(15)));
-        Assert.assertFalse(links.isShown(links.byText(COMPOSER)));
+        Assert.assertFalse(links.isShown(links.byDesc(COMPOSER)));
     }
 
     @Test

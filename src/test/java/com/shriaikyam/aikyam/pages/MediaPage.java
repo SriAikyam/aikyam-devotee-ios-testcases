@@ -1,5 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -12,20 +13,31 @@ public class MediaPage extends BasePage {
     private static final Duration SCROLL_TIMEOUT = Duration.ofSeconds(10);
     private static final int VIDEO_SEARCH_SCROLL_ATTEMPTS = 5;
 
+    // VideoDurationBadge's play-icon fallback is labelled "Video"; the inline feed player's
+    // mute toggle (Core/Media/VideoPlayerView) reads "Mute"/"Unmute".
     private final By videoIndicator = accessibilityId("Video");
-    private final By videoThumbnail = accessibilityId("Video thumbnail");
+    private final By videoThumbnail = id("feed.post.video");
     private final By playAction = accessibilityId("Play");
-    private final By playVideoAction = accessibilityId("Play video");
     private final By muteAction = accessibilityId("Mute");
     private final By unmuteAction = accessibilityId("Unmute");
-    private final By playbackError = accessibilityId("Playback error");
-    private final By homeBottomNav = accessibilityId("Home");
-    private final By saveAction = accessibilityId("Save");
-    private final By commentAction = accessibilityId("Comment");
-    private final By namaskaraAction = accessibilityId("Namaskara");
+    private final By homeBottomNav = id("tab.home");
+    // FeedPostRow's engagement buttons are icon-only; until they carry identifiers, the
+    // button label falls back to the asset name of its FeedTemplateIcon (plus any count).
+    private final By saveAction = id("feed.post.save");
+    private final By saveIcon = feedButtonStartingWith("bookmark");
+    private final By commentAction = id("feed.post.comment");
+    private final By commentIcon = feedButtonStartingWith("comment");
+    private final By namaskaraAction = id("feed.post.namaskara");
+    private final By namaskaraIcon = feedButtonStartingWith("Namaskara3");
 
     public MediaPage(IOSDriver driver) {
         super(driver);
+    }
+
+    private static By feedButtonStartingWith(String assetName) {
+        String v = predicateLiteral(assetName);
+        return AppiumBy.iOSNsPredicateString(
+                "type == 'XCUIElementTypeButton' AND (label BEGINSWITH " + v + " OR name BEGINSWITH " + v + ")");
     }
 
     public boolean isVideoVisible() {
@@ -36,10 +48,10 @@ public class MediaPage extends BasePage {
         if (!findVideoInFeed()) {
             return false;
         }
-        if (isAnyVideoLocatorVisible(muteAction, unmuteAction, videoThumbnail, playbackError, textContains("Processing video"), textContains("Video unavailable"))) {
+        if (isAnyVideoLocatorVisible(muteAction, unmuteAction, videoThumbnail, textContains("Processing video"))) {
             return true;
         }
-        return tapFirstVisible(playAction, playVideoAction, videoIndicator, textContains("Video"));
+        return tapFirstVisible(playAction, videoThumbnail);
     }
 
     public boolean isMediaContentAvailable() {
@@ -60,7 +72,8 @@ public class MediaPage extends BasePage {
     }
 
     public boolean isMediaFeedUsable() {
-        return isAnyVideoLocatorVisible(homeBottomNav, saveAction, commentAction, namaskaraAction);
+        return isAnyVideoLocatorVisible(homeBottomNav, saveAction, saveIcon, commentAction, commentIcon,
+                namaskaraAction, namaskaraIcon);
     }
 
     public boolean isHomeNavigationVisible() {
@@ -68,15 +81,15 @@ public class MediaPage extends BasePage {
     }
 
     public boolean isSaveActionVisible() {
-        return isAnyVideoLocatorVisible(saveAction);
+        return isAnyVideoLocatorVisible(saveAction, saveIcon);
     }
 
     public boolean isCommentActionVisible() {
-        return isAnyVideoLocatorVisible(commentAction);
+        return isAnyVideoLocatorVisible(commentAction, commentIcon);
     }
 
     public boolean isNamaskaraActionVisible() {
-        return isAnyVideoLocatorVisible(namaskaraAction);
+        return isAnyVideoLocatorVisible(namaskaraAction, namaskaraIcon);
     }
 
     public boolean isMediaAvailableAfterScroll() {
@@ -171,14 +184,9 @@ public class MediaPage extends BasePage {
                 videoIndicator,
                 videoThumbnail,
                 playAction,
-                playVideoAction,
                 muteAction,
                 unmuteAction,
-                playbackError,
-                textContains("Video"),
-                textContains("Processing video"),
-                textContains("Video unavailable"),
-                textContains("Tap to retry")
+                textContains("Processing video")
         );
     }
 }

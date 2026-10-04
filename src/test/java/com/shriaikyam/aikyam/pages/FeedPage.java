@@ -2,12 +2,12 @@ package com.shriaikyam.aikyam.pages;
 
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
-import io.appium.java_client.android.connection.ConnectionStateBuilder;
+import org.junit.AssumptionViolatedException;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.Point;
-import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.Rectangle;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.PointerInput;
 import org.openqa.selenium.interactions.Sequence;
@@ -17,88 +17,64 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/** Home feed (SmoothFeedView + FeedPostRow). Standalone rather than a BasePage subclass:
+ * its private helpers predate BasePage and collide with BasePage's protected ones, so it
+ * reuses BasePage's public static gestures instead. */
 public class FeedPage {
 
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration SCROLL_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration IMPLICIT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Pattern COUNT = Pattern.compile("^[0-9][0-9,.]*[KkMm]?$");
+    private static final Pattern CAROUSEL_COUNTER = Pattern.compile("\\d+/\\d+");
 
     private final IOSDriver driver;
 
-    // Bottom-nav labels are plain Text nodes with no contentDescription, so an
-    // accessibility-id locator never matches them; match on visible label text.
-    private final By homeAction = AppiumBy.androidUIAutomator("new UiSelector().text(\"Home\")");
-    private final By homeActionKn = AppiumBy.androidUIAutomator("new UiSelector().text(\"ಮುಖಪುಟ\")");
-    // No "Like" control exists in this app - Namaskara IS the like action, and it is the
-    // only one of the two ever present in the tree (confirmed live: every feed page source
-    // carries contentDescription "Namaskara" and none carries "Like"). The English and
-    // Kannada "Like" ids below matched nothing and are kept out of the locator lists.
-    private final By commentAction = AppiumBy.accessibilityId("Comment");
-    private final By commentActionKn = AppiumBy.accessibilityId("ಕಾಮೆಂಟ್");
-    private final By shareAction = AppiumBy.accessibilityId("Share");
-    private final By shareActionKn = AppiumBy.accessibilityId("ಹಂಚಿಕೊಳ್ಳಿ");
-    private final By sendAction = AppiumBy.accessibilityId("Send");
-    private final By sendActionKn = AppiumBy.accessibilityId("ಕಳುಹಿಸಿ");
-    private final By namaskaraAction = AppiumBy.accessibilityId("Namaskara");
-    private final By saveAction = AppiumBy.accessibilityId("Save");
-    private final By saveActionKn = AppiumBy.accessibilityId("ಉಳಿಸಿ");
-    private final By moreOptionsAction = AppiumBy.accessibilityId("More options");
-    private final By moreOptionsActionKn = AppiumBy.accessibilityId("ಹೆಚ್ಚಿನ ಆಯ್ಕೆಗಳು");
-    private final By profileAvatarAction = AppiumBy.accessibilityId("Profile");
-    private final By collapseAction = AppiumBy.accessibilityId("Collapse");
-    private final By exportAction = AppiumBy.accessibilityId("Export");
-    private final By createPostAction = AppiumBy.accessibilityId("Create Post");
-    private final By createPostTextAction = AppiumBy.androidUIAutomator("new UiSelector().textContains(\"Create Post\")");
-    private final By createTextAction = AppiumBy.androidUIAutomator("new UiSelector().textContains(\"Create\")");
-    private final By cancelAction = AppiumBy.androidUIAutomator("new UiSelector().text(\"Cancel\")");
-    private final By cancelActionKn = AppiumBy.androidUIAutomator("new UiSelector().text(\"ರದ್ದುಮಾಡಿ\")");
-    private final By unsaveDialogAction = AppiumBy.androidUIAutomator("new UiSelector().textContains(\"Unsave Post\")");
-    private final By unsaveDialogActionKn = AppiumBy.androidUIAutomator("new UiSelector().textContains(\"ಉಳಿಸದೇ\")");
+    private final By homeAction = AppiumBy.accessibilityId("tab.home");
+    // Namaskara IS the like action; there is no separate Like control.
+    private final By namaskaraAction = AppiumBy.accessibilityId("feed.post.like");
+    private final By commentAction = AppiumBy.accessibilityId("feed.post.comment");
+    private final By shareAction = AppiumBy.accessibilityId("feed.post.share");
+    private final By saveAction = AppiumBy.accessibilityId("feed.post.save");
+    // Only rendered on someone else's post (PostOptionsPolicy hides it on own posts in the feed).
+    private final By moreOptionsAction = AppiumBy.accessibilityId("feed.post.more");
+    private final By authorHeader = AppiumBy.accessibilityId("feed.post.author");
+    private final By profileAvatarAction = AppiumBy.accessibilityId("header.account");
+    private final By createPostAction = AppiumBy.accessibilityId("feed.createPost");
+    private final By cancelAction = BasePage.byExactText("Cancel");
+    private final By unsaveDialogAction = AppiumBy.iOSNsPredicateString("label BEGINSWITH 'Unsave'");
 
-    // Namaskara/Save icons never change their contentDescription on toggle (confirmed
-    // via source read: tint is the only visual delta, which Appium/UiAutomator2 cannot
-    // read from the accessibility tree) - the like-count text next to Namaskara
-    // (FeedEngagementRow's `likeLabel`) is the only assertable real-outcome signal.
-    // Matches any short numeric/compact-count text (e.g. "1", "12", "1.2K") anywhere
-    // visible, not scoped to a specific post - a signature-diff (same pattern as
-    // captureFeedState()/didFeedScroll()) is enough to prove a tap actually registered.
-    private final By numericCountText = AppiumBy.androidUIAutomator(
-            "new UiSelector().textMatches(\"^[0-9][0-9,.]*[KkMm]?$\")"
-    );
+    // Post options is a SwiftUI Menu, not a titled sheet: visitors get Save/Follow/.../Report,
+    // owners (where the screen allows it) get Delete only.
+    private final By postOptionsDeleteAction = AppiumBy.accessibilityId("postOptions.delete");
+    private final By postOptionsDeleteText = BasePage.byExactText("Delete");
+    private final By postOptionsReportAction = AppiumBy.accessibilityId("postOptions.report");
+    private final By postOptionsReportText = BasePage.byExactText("Report");
+    private final By menuDismissRegion = AppiumBy.accessibilityId("PopoverDismissRegion");
 
-    // Post Options sheet (opened via "More options") is a binary Delete/Report policy -
-    // exactly one is ever shown, never both. Both are plain Text nodes.
-    private final By postOptionsDeleteAction = AppiumBy.androidUIAutomator("new UiSelector().text(\"Delete\")");
-    private final By postOptionsReportAction = AppiumBy.androidUIAutomator("new UiSelector().text(\"Report\")");
-    private final By postOptionsTitle = AppiumBy.androidUIAutomator("new UiSelector().text(\"Options\")");
+    // FeedSubscriberStrip renders nothing at all when the account follows no one.
+    private final By allPostsFilterTab = AppiumBy.accessibilityId("feed.filter.allPosts");
+    private final By templesFilterTab = AppiumBy.accessibilityId("feed.filter.temples");
+    private final By liveFilterTab = AppiumBy.accessibilityId("feed.filter.live");
 
-    // FeedSubscriberStrip - "All Posts" and "Temples" carry real contentDescriptions;
-    // "Live" is the same filter tab LivePlayerPage already uses (a text label, not a
-    // static content-desc, since it also appears elsewhere on live cards).
-    private final By allPostsFilterTab = AppiumBy.accessibilityId("All Posts");
-    private final By templesFilterTab = AppiumBy.accessibilityId("Temples");
-    private final By liveFilterTab = AppiumBy.androidUIAutomator("new UiSelector().text(\"Live\")");
-
-    // A video row's volume toggle. Its contentDescription names the action the tap would
-    // perform, so it reports the CURRENT state inverted: "Mute" while audible, "Unmute"
-    // while muted (FeedScreen.kt). That inversion makes it a genuine playback-state
-    // signal - the only labelled video control in the feed. Play/pause and fullscreen
-    // expose no label at all, so they cannot be driven by a locator.
-    private final By muteAction = AppiumBy.accessibilityId("Mute");
-    private final By unmuteAction = AppiumBy.accessibilityId("Unmute");
+    // The video volume toggle's identifier names the action a tap would perform, so it
+    // reports the current state inverted: "video.mute" while audible, "video.unmute" while muted.
+    private final By muteAction = AppiumBy.accessibilityId("video.mute");
+    private final By unmuteAction = AppiumBy.accessibilityId("video.unmute");
 
     public FeedPage(IOSDriver driver) {
         this.driver = driver;
     }
 
-    // Reads whichever appPackage BaseTest configured the session with (dev or prod,
-    // controlled by -Dappium.appPackage) so back-press recovery guards below always
-    // compare against the app actually under test, not a hardcoded flavor.
-    private String appPackage() {
-        Object appPackage = driver.getCapabilities().getCapability("appium:appPackage");
-        return appPackage != null ? appPackage.toString() : "com.shriaikyam.aikyam.dev";
+    private String bundleId() {
+        Object bundleId = driver.getCapabilities().getCapability("appium:bundleId");
+        if (bundleId == null) {
+            bundleId = driver.getCapabilities().getCapability("bundleId");
+        }
+        return bundleId != null ? bundleId.toString() : DeepLinkPage.DEV_BUNDLE_ID;
     }
 
     public void waitUntilLoaded() {
@@ -204,15 +180,14 @@ public class FeedPage {
         }
     }
 
-    /** Toggles airplane mode (and Wi-Fi/data with it) on or off. */
+    /** iOS: XCUITest has no airplane-mode/network control for the simulator, so an offline
+     * scenario cannot be driven from here. Enabling skips the calling test instead of letting
+     * it pass against a still-online app; disabling is a no-op so teardown stays safe. */
     public void setAirplaneMode(boolean enabled) {
-        ConnectionStateBuilder builder = new ConnectionStateBuilder(driver.getConnection());
         if (enabled) {
-            builder.withAirplaneModeEnabled().withWiFiDisabled().withDataDisabled();
-        } else {
-            builder.withAirplaneModeDisabled().withWiFiEnabled().withDataEnabled();
+            throw new AssumptionViolatedException(
+                    "iOS: network cannot be toggled through XCUITest; offline scenario not runnable");
         }
-        driver.setConnection(builder.build());
     }
 
     /**
@@ -225,19 +200,19 @@ public class FeedPage {
     }
 
     /**
-     * Presses back repeatedly across whatever screens that reaches (this can exit the
-     * app entirely), then relaunches it to confirm it recovers rather than staying
-     * crashed or corrupted.
+     * iOS has no system Back: repeats the in-app back gesture/controls across whatever screens
+     * that reaches, then re-activates the app to confirm it recovers rather than staying
+     * stuck or corrupted.
      */
     public boolean isAppUsableAfterBackButtonSpam(int presses) {
         for (int i = 0; i < presses; i++) {
             try {
-                driver.navigate().back();
+                BasePage.navigateBack(driver);
             } catch (RuntimeException ignored) {
                 break;
             }
         }
-        driver.activateApp(appPackage());
+        driver.activateApp(bundleId());
         waitUntilLoaded();
         return isAnyFeedItemVisible();
     }
@@ -261,41 +236,22 @@ public class FeedPage {
         return pageSource != null && pageSource.contains(value);
     }
 
-    /** Taps the top-bar avatar, which navigates to the Settings screen hosting "Personal Profile". */
+    /** Taps the top-bar avatar, which opens the account/settings hub. */
     public boolean openOwnProfile() {
         return tapFirstVisible(profileAvatarAction);
     }
 
     public boolean openCreatePost() {
-        if (tapFirstVisible(createPostAction, createPostTextAction, createTextAction)) {
+        if (tapFirstVisible(createPostAction)) {
             return true;
         }
 
-        // Confirmed live: a prior test can leave the app stranded deep in Settings/
-        // Personal Profile/a single-post detail view (e.g. after ProfilePage's
-        // deleteOpenPost() auto-advances to an adjacent post) - all pushed onto the Home
-        // tab's own internal nav stack, so tapping the already-active Home tab does NOT
-        // pop back to the Feed root (it's a no-op reselect, not a "go to tab root"
-        // action). Unwind with real back-presses first so tapHomeIfVisible()'s tap
-        // actually has a Feed root to land on.
-        // isAnyFeedItemVisible() is NOT a safe stopping condition here - confirmed live,
-        // the single-post detail viewer renders the exact same Like/Comment/Share/More
-        // icons as a Feed row, so it reports "feed item visible" even when nowhere near
-        // Feed, and the loop never presses back at all. profileAvatarAction is scoped
-        // correctly (Feed's own top bar only, per ProfilePage's openProfile() javadoc).
-        // Confirmed live (same failure mode already fixed once in ProfilePage): once
-        // back-presses reach the Feed root, one more press exits the app entirely to the
-        // Android home screen, after which nothing here ever matches again. Stop the
-        // moment we've left the app's own package and relaunch it instead of pressing
-        // back further.
-        for (int attempt = 0; attempt < 6 && visibleElements(profileAvatarAction).isEmpty(); attempt++) {
+        // A prior test can leave a detail screen pushed onto the Home tab's own stack;
+        // re-tapping the active Home tab only scrolls to top, it does not pop. Back out first,
+        // until the tab bar (and with it the feed root) is reachable again.
+        for (int attempt = 0; attempt < 6 && visibleElements(homeAction).isEmpty(); attempt++) {
             try {
-                String currentPackage = driver.getCurrentPackage();
-                if (currentPackage != null && !currentPackage.equals(appPackage())) {
-                    driver.activateApp(appPackage());
-                    break;
-                }
-                driver.navigate().back();
+                BasePage.navigateBack(driver);
             } catch (RuntimeException ignored) {
                 break;
             }
@@ -303,10 +259,10 @@ public class FeedPage {
 
         tapHomeIfVisible();
         for (int attempt = 0; attempt < 4; attempt++) {
-            swipeDown();
-            if (tapFirstVisible(createPostAction, createPostTextAction, createTextAction)) {
+            if (tapFirstVisible(createPostAction)) {
                 return true;
             }
+            swipeDown();
         }
 
         return false;
@@ -347,40 +303,79 @@ public class FeedPage {
         return true;
     }
 
-    /** A content-agnostic signature of every visible short numeric/compact-count text
-     * on screen (e.g. Namaskara's like-count) - used to prove a tap actually changed
-     * something real, not just that the feed didn't crash. Same diff pattern as
-     * captureFeedState()/didFeedScroll(). */
+    /** Signature of the counts on every visible Namaskara/Comment/Share button. The count is
+     * a Text inside the SwiftUI Button, so it surfaces only as the last ", "-separated part of
+     * the button's label (absent when zero). Used to prove a tap actually changed something
+     * real, not just that the feed didn't crash. */
     public String captureNumericCountsSignature() {
-        List<String> counts = visibleElements(numericCountText).stream()
-                .map(WebElement::getText)
-                .filter(value -> value != null && !value.isBlank())
-                .sorted()
-                .collect(Collectors.toList());
+        List<String> counts = new ArrayList<>();
+        for (By locator : List.of(namaskaraAction, commentAction, shareAction)) {
+            for (WebElement element : visibleElements(locator)) {
+                try {
+                    counts.add(countFromLabel(element.getAttribute("label")));
+                } catch (StaleElementReferenceException ignored) {
+                    // Re-rendered mid-read; the caller's wait retries.
+                }
+            }
+            counts.add("/");
+        }
         return String.join("|", counts);
     }
 
-    /** Opens the Post Options sheet from the first available "More options" icon and
-     * returns which single action it shows ("Delete" or "Report" - the policy is
-     * binary, never both), or null if neither appeared. */
+    /** Count beside the first visible Comment icon; 0 when the app hides it (zero comments). */
+    public int firstVisibleCommentCount() {
+        WebElement comment = firstVisibleAction(commentActionLocators());
+        if (comment == null) {
+            throw new IllegalStateException("No Comment action visible on the feed");
+        }
+        String count = countFromLabel(comment.getAttribute("label"));
+        String digits = count.replaceAll("[^0-9]", "");
+        return digits.isEmpty() ? 0 : Integer.parseInt(digits);
+    }
+
+    static String countFromLabel(String label) {
+        if (label == null) {
+            return "";
+        }
+        String[] parts = label.split(", ");
+        String last = parts[parts.length - 1].trim();
+        return parts.length > 1 && COUNT.matcher(last).matches() ? last : "";
+    }
+
+    /** A FeedPostRow header button's label is the avatar initial, the display name, then the
+     * "@handle · time" (or location) line, joined by ", ". Returns the display name. */
+    public static String displayNameFromLabel(String label) {
+        if (label == null) {
+            return null;
+        }
+        String fallback = null;
+        for (String part : label.split(", ")) {
+            String p = part.trim();
+            if (p.isEmpty() || p.startsWith("@") || p.contains(" · ")) {
+                continue;
+            }
+            if (p.length() > 2) {
+                return p;
+            }
+            if (fallback == null) {
+                fallback = p;
+            }
+        }
+        return fallback != null ? fallback : label.trim();
+    }
+
+    /** Opens the post options menu from the first available "More options" icon and returns
+     * which owner/visitor action it shows ("Delete" or "Report"), or null if neither appeared. */
     public String openFirstPostOptionsSheet() {
         if (!findAnyAction(moreOptionsActionLocators())) {
             return null;
         }
-        // Deliberately not tapFirstMoreOptionsAction() - that helper waits afterward for
-        // isAnyFeedItemVisible(), which is correct for Like/Save (they stay on the feed)
-        // but wrong here: the Post Options sheet covers the feed's action icons, so that
-        // wait would time out even though the sheet opened successfully (confirmed live -
-        // the sheet was visible on screen while this method still threw).
         WebElement moreOptions = firstVisibleAction(moreOptionsActionLocators());
         if (moreOptions == null) {
             return null;
         }
-        // findAnyAction()'s own scroll-to-find can land the icon right at the very top
-        // edge of the viewport (confirmed live: y~50px, against an ~83px status bar) -
-        // a tap that close to system chrome was unreliable. Nudge it toward the middle
-        // of the screen first.
-        if (moreOptions.getLocation().getY() < 150) {
+        // Keep the icon clear of the status bar/floating top bar before tapping it.
+        if (moreOptions.getLocation().getY() < driver.manage().window().getSize().getHeight() * 0.15) {
             swipeDown();
             moreOptions = firstVisibleAction(moreOptionsActionLocators());
             if (moreOptions == null) {
@@ -389,40 +384,45 @@ public class FeedPage {
         }
         moreOptions.click();
         try {
-            waitForFirstVisible(postOptionsTitle, postOptionsDeleteAction, postOptionsReportAction);
+            waitForFirstVisible(postOptionsDeleteAction, postOptionsReportAction, postOptionsDeleteText, postOptionsReportText);
         } catch (RuntimeException exception) {
             return null;
         }
-        if (!visibleElements(postOptionsDeleteAction).isEmpty()) {
+        if (!visibleElements(postOptionsDeleteAction).isEmpty() || !visibleElements(postOptionsDeleteText).isEmpty()) {
             return "Delete";
         }
-        if (!visibleElements(postOptionsReportAction).isEmpty()) {
+        if (!visibleElements(postOptionsReportAction).isEmpty() || !visibleElements(postOptionsReportText).isEmpty()) {
             return "Report";
         }
         return null;
     }
 
     public boolean isPostOptionsSheetVisible() {
-        return !visibleElements(postOptionsTitle).isEmpty()
-                || !visibleElements(postOptionsDeleteAction).isEmpty()
-                || !visibleElements(postOptionsReportAction).isEmpty();
+        return !visibleElements(postOptionsDeleteAction).isEmpty()
+                || !visibleElements(postOptionsReportAction).isEmpty()
+                || !visibleElements(postOptionsDeleteText).isEmpty()
+                || !visibleElements(postOptionsReportText).isEmpty();
     }
 
-    /** Dismisses the sheet without acting on either option - real device back
-     * pops Screen.PostOptions off the nav graph per source (no dedicated close icon). */
+    /** Dismisses the menu without acting on any option: a SwiftUI Menu closes on a tap
+     * outside it (XCUITest exposes that area as PopoverDismissRegion when present). */
     public boolean dismissPostOptionsSheet() {
         try {
-            driver.navigate().back();
+            List<WebElement> dismiss = visibleElements(menuDismissRegion);
+            if (!dismiss.isEmpty()) {
+                dismiss.get(0).click();
+                return true;
+            }
+            Dimension screen = driver.manage().window().getSize();
+            BasePage.tapPoint(driver, screen.getWidth() / 2, (int) (screen.getHeight() * 0.06));
             return true;
         } catch (RuntimeException exception) {
             return false;
         }
     }
 
-    /** The subscriber strip is pinned to the very top of the feed - unlike
-     * findAnyAction()'s scroll-forward strategy (built for "More options", which needs
-     * to reach LATER posts), recovering this needs scrolling back UP first if an
-     * earlier test left the feed scrolled down. */
+    /** The subscriber strip sits at the very top of the feed, so recovering it needs scrolling
+     * back UP if an earlier test left the feed scrolled down. */
     public boolean isAllPostsFilterVisible() {
         return scrollToTopThenFind(allPostsFilterTab);
     }
@@ -435,10 +435,8 @@ public class FeedPage {
         if (!visibleElements(locator).isEmpty()) {
             return true;
         }
-        // Re-tapping the already-selected Home tab is a common "scroll to top" gesture
-        // in this app's own recovery (see tapHomeIfVisible()'s use elsewhere) - try it
-        // before falling back to repeated swipes, which alone were not enough to climb
-        // back out of a long video reel scrolled deep into the feed (confirmed live).
+        // Re-tapping the already-selected Home tab scrolls the feed to the top
+        // (SmoothFeedView's tabReselectGeneration handler) - try it before swiping.
         tapHomeIfVisible();
         if (!visibleElements(locator).isEmpty()) {
             return true;
@@ -466,16 +464,6 @@ public class FeedPage {
         return tapFirstVisible(liveFilterTab);
     }
 
-    // Double-tap-to-like was investigated and deliberately dropped: a hand-rolled W3C
-    // Actions sequence is rejected outright by this UiAutomator2 version ("Unable to
-    // perform W3C actions ... make sure your input actions chain is valid"), and the
-    // driver's own "mobile: doubleClickGesture" command executes without error but
-    // isn't fast enough to register as a genuine double-tap to the app's own gesture
-    // detector - it falls through to two separate single-taps instead (confirmed live:
-    // opened the fullscreen viewer, then toggled its sound icon). No tunable timing
-    // parameter is exposed on that command to fix this - not reliably automatable with
-    // the current driver/device combination.
-
     public String captureFeedState() {
         List<String> visibleFeedParts = new ArrayList<>();
 
@@ -497,25 +485,39 @@ public class FeedPage {
 
     // ---- Feed journeys: share, fullscreen media, carousel ----
 
-    private final By viewerBackAction = AppiumBy.accessibilityId("Back");
-    private final By slashText = AppiumBy.androidUIAutomator("new UiSelector().textContains(\"/\")");
-    private static final java.util.regex.Pattern CAROUSEL_COUNTER = java.util.regex.Pattern.compile("\\d+/\\d+");
+    private final By postMedia = AppiumBy.accessibilityId("feed.post.media");
+    private final By viewerBackAction = AppiumBy.accessibilityId("immersive.back");
+    private final By carouselCounter = AppiumBy.accessibilityId("feed.post.carouselCounter");
 
     public boolean tapFirstShareAction() {
-        return tapFirstVisible(shareAction, shareActionKn);
+        return tapFirstVisible(shareAction);
     }
 
-    /** The post's media is an unlabelled, non-clickable view that sits directly above its
-     * action row, so a point just above the first Save icon is inside it. (An earlier version
-     * measured from the header's More options button, which a user's own post does not show.) */
+    /** Centre of the visible part of the first post image that is clear of the top bar/strip
+     * and the tab bar. Falls back to a point just above the first action row - the media sits
+     * directly on top of it - while the image is still a shimmer placeholder with no element. */
     private Point firstPostMediaCenter() {
+        Dimension screen = driver.manage().window().getSize();
+        int minY = (int) (screen.getHeight() * 0.20);
+        int maxY = (int) (screen.getHeight() * 0.85);
+        for (WebElement media : visibleElements(postMedia)) {
+            try {
+                Rectangle rect = media.getRect();
+                int top = Math.max(rect.getY(), minY);
+                int bottom = Math.min(rect.getY() + rect.getHeight(), maxY);
+                if (bottom - top > 60) {
+                    return new Point(rect.getX() + rect.getWidth() / 2, (top + bottom) / 2);
+                }
+            } catch (StaleElementReferenceException ignored) {
+                // Recycled mid-read; try the next one.
+            }
+        }
         WebElement save = firstVisibleAction(saveActionLocators());
         if (save == null) {
             return null;
         }
-        Dimension screen = driver.manage().window().getSize();
-        int y = save.getRect().getY() - 300;
-        if (y < screen.getHeight() / 4) {
+        int y = save.getRect().getY() - 80;
+        if (y < minY) {
             return null;
         }
         return new Point(screen.getWidth() / 2, y);
@@ -537,16 +539,15 @@ public class FeedPage {
         if (center == null) {
             return false;
         }
-        dragFinger(center.getX(), center.getY(), center.getX(), center.getY(), 50);
+        BasePage.tapPoint(driver, center.getX(), center.getY());
         return true;
     }
 
-    /** Fullscreen viewer is the only feed surface that exposes a Back control. */
+    /** The immersive viewer is the only feed surface with its own Back control. */
     public boolean isPostFullscreenViewerOpen() {
         return !visibleElements(viewerBackAction).isEmpty();
     }
 
-    /** The viewer opens after the tap-vs-double-tap delay, so poll instead of checking once. */
     public boolean waitForPostFullscreenViewer() {
         try {
             return new WebDriverWait(driver, SCROLL_TIMEOUT).ignoring(StaleElementReferenceException.class).until(ignored -> isPostFullscreenViewerOpen());
@@ -572,17 +573,20 @@ public class FeedPage {
     }
 
     private String visibleCarouselCounter() {
-        for (WebElement element : visibleElements(slashText)) {
-            String text = element.getText();
-            if (text != null && CAROUSEL_COUNTER.matcher(text.trim()).matches()) {
-                return text.trim();
-            }
+        WebElement element = visibleCarouselCounterElement();
+        return element == null ? null : counterText(element);
+    }
+
+    private static String counterText(WebElement element) {
+        String text = element.getAttribute("label");
+        if (text == null) {
+            text = element.getText();
         }
-        return null;
+        return text == null ? null : text.trim();
     }
 
     /** Swipes the carousel whose counter is on screen, first scrolling it up if its image
-     * is still half under the bottom navigation. Returns false if no carousel is visible. */
+     * is still half under the tab bar. Returns false if no carousel is visible. */
     public boolean swipeVisibleCarousel(boolean toNext) {
         Dimension screen = driver.manage().window().getSize();
         for (int attempt = 0; attempt < 4; attempt++) {
@@ -597,7 +601,8 @@ public class FeedPage {
                 continue;
             }
             int width = screen.getWidth();
-            int swipeY = y + 300;
+            // The counter badge sits in the image's top-right corner; swipe across the image below it.
+            int swipeY = y + 120;
             dragFinger(toNext ? width * 4 / 5 : width / 5, swipeY, toNext ? width / 5 : width * 4 / 5, swipeY, 400);
             return true;
         }
@@ -605,10 +610,14 @@ public class FeedPage {
     }
 
     private WebElement visibleCarouselCounterElement() {
-        for (WebElement element : visibleElements(slashText)) {
-            String text = element.getText();
-            if (text != null && CAROUSEL_COUNTER.matcher(text.trim()).matches()) {
-                return element;
+        for (WebElement element : visibleElements(carouselCounter)) {
+            try {
+                String text = counterText(element);
+                if (text != null && CAROUSEL_COUNTER.matcher(text).matches()) {
+                    return element;
+                }
+            } catch (StaleElementReferenceException ignored) {
+                // Re-rendered mid-read; try the next one.
             }
         }
         return null;
@@ -646,14 +655,19 @@ public class FeedPage {
 
     // ---- Feed journeys: follow a temple, filter author ----
 
-    private final By followButton = AppiumBy.androidUIAutomator("new UiSelector().text(\"Follow\")");
-    private final By followingButton = AppiumBy.androidUIAutomator("new UiSelector().text(\"Following\")");
-    private final By unfollowConfirm = AppiumBy.androidUIAutomator("new UiSelector().text(\"Unfollow\")");
-    private final By anyTextView = AppiumBy.className("android.widget.TextView");
+    private final By feedFollowButton = AppiumBy.accessibilityId("feed.post.follow");
+    // TempleProfileView ("temple.follow") / UserProfileScreen ("profile.follow") use one toggle
+    // for both states; its label also carries the icon's, so the state is read with CONTAINS.
+    private static final String PROFILE_TOGGLE = "name IN {'temple.follow', 'profile.follow'}";
+    private final By profileFollowButton = AppiumBy.iOSNsPredicateString(
+            PROFILE_TOGGLE + " AND label CONTAINS 'Follow' AND NOT (label CONTAINS 'Following')");
+    private final By followingButton = AppiumBy.iOSNsPredicateString(
+            PROFILE_TOGGLE + " AND label CONTAINS 'Following'");
+    private final By unfollowConfirm = BasePage.byExactText("Unfollow");
 
     public boolean scrollToFollowButton(int scrollAttempts) {
         for (int attempt = 0; attempt <= scrollAttempts; attempt++) {
-            if (!visibleElements(followButton).isEmpty()) {
+            if (!visibleElements(feedFollowButton).isEmpty()) {
                 return true;
             }
             swipeUp();
@@ -661,43 +675,42 @@ public class FeedPage {
         return false;
     }
 
+    /** Header author button on the same row as the given element, or null. */
+    private WebElement authorOnRowOf(WebElement anchor) {
+        Rectangle a = anchor.getRect();
+        int rowCenter = a.getY() + a.getHeight() / 2;
+        for (WebElement author : visibleElements(authorHeader)) {
+            Rectangle r = author.getRect();
+            if (Math.abs(r.getY() + r.getHeight() / 2 - rowCenter) < 30) {
+                return author;
+            }
+        }
+        return null;
+    }
+
     /** Name of the post author on the same header row as the first visible Follow button. */
     public String authorBesideFollowButton() {
-        List<WebElement> buttons = visibleElements(followButton);
+        List<WebElement> buttons = visibleElements(feedFollowButton);
         if (buttons.isEmpty()) {
             return null;
         }
-        int rowY = buttons.get(0).getRect().getY();
-        WebElement name = null;
-        for (WebElement element : visibleElements(anyTextView)) {
-            Rectangle rect = element.getRect();
-            String text = element.getText();
-            if (text == null || text.isBlank() || text.startsWith("@") || "Follow".equals(text)) {
-                continue;
-            }
-            if (Math.abs(rect.getY() - rowY) < 120 && rect.getX() < 700
-                    && (name == null || rect.getY() < name.getRect().getY())) {
-                name = element;
-            }
-        }
-        return name == null ? null : name.getText().trim();
+        WebElement author = authorOnRowOf(buttons.get(0));
+        return author == null ? null : displayNameFromLabel(author.getAttribute("label"));
     }
 
     public boolean tapFollow() {
-        return tapFirstVisible(followButton);
+        return tapFirstVisible(feedFollowButton);
     }
 
     /** True once no Follow button remains on the header row of the given author. */
     public boolean waitForFollowButtonGone(String author) {
         try {
             return new WebDriverWait(driver, SCROLL_TIMEOUT).ignoring(StaleElementReferenceException.class).until(ignored -> {
-                for (WebElement button : visibleElements(followButton)) {
-                    int rowY = button.getRect().getY();
-                    for (WebElement element : visibleElements(AppiumBy.androidUIAutomator(
-                            "new UiSelector().text(\"" + author + "\")"))) {
-                        if (Math.abs(element.getRect().getY() - rowY) < 120) {
-                            return false;
-                        }
+                for (WebElement button : visibleElements(feedFollowButton)) {
+                    WebElement rowAuthor = authorOnRowOf(button);
+                    String label = rowAuthor == null ? null : rowAuthor.getAttribute("label");
+                    if (label != null && label.contains(author)) {
+                        return false;
                     }
                 }
                 return true;
@@ -708,7 +721,18 @@ public class FeedPage {
     }
 
     public boolean openAuthorProfile(String author) {
-        return tapFirstVisible(AppiumBy.androidUIAutomator("new UiSelector().text(\"" + author + "\")"));
+        for (WebElement header : visibleElements(authorHeader)) {
+            try {
+                String label = header.getAttribute("label");
+                if (label != null && label.contains(author)) {
+                    header.click();
+                    return true;
+                }
+            } catch (RuntimeException ignored) {
+                // Recycled mid-read; try the next one.
+            }
+        }
+        return tapFirstVisible(BasePage.byExactText(author));
     }
 
     public boolean tapFollowing() {
@@ -720,7 +744,7 @@ public class FeedPage {
     }
 
     public boolean waitForFollowButton() {
-        return waitForVisible(followButton);
+        return waitForVisible(profileFollowButton) || waitForVisible(feedFollowButton);
     }
 
     public boolean isUnfollowSheetVisible() {
@@ -739,8 +763,7 @@ public class FeedPage {
         }
     }
 
-    /** Author name of the first post, read from the header band just under the filter strip
-     * (a fraction of the screen height, so it does not depend on the device's resolution). */
+    /** Display name of the topmost post whose header is on screen. */
     public String firstPostAuthor() {
         try {
             return readFirstPostAuthor();
@@ -750,17 +773,13 @@ public class FeedPage {
     }
 
     private String readFirstPostAuthor() {
-        int height = driver.manage().window().getSize().getHeight();
         WebElement best = null;
-        for (WebElement element : visibleElements(anyTextView)) {
-            Rectangle rect = element.getRect();
-            String text = element.getText();
-            if (rect.getY() > height * 0.21 && rect.getY() < height * 0.27 && rect.getX() < 700
-                    && text != null && !text.isBlank() && (best == null || rect.getY() < best.getRect().getY())) {
+        for (WebElement element : visibleElements(authorHeader)) {
+            if (element.getRect().getY() >= 0 && (best == null || element.getRect().getY() < best.getRect().getY())) {
                 best = element;
             }
         }
-        return best == null ? null : best.getText().trim();
+        return best == null ? null : displayNameFromLabel(best.getAttribute("label"));
     }
 
     public boolean waitForFirstPostAuthorToChangeFrom(String previous) {
@@ -787,15 +806,7 @@ public class FeedPage {
         int centerX = size.getWidth() / 2;
         int startY = (int) (size.getHeight() * startHeightPercent);
         int endY = (int) (size.getHeight() * endHeightPercent);
-
-        PointerInput finger = new PointerInput(PointerInput.Kind.TOUCH, "finger");
-        Sequence swipe = new Sequence(finger, 1);
-        swipe.addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), centerX, startY));
-        swipe.addAction(finger.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
-        swipe.addAction(finger.createPointerMove(Duration.ofMillis(700), PointerInput.Origin.viewport(), centerX, endY));
-        swipe.addAction(finger.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
-
-        driver.perform(Collections.singletonList(swipe));
+        dragFinger(centerX, startY, centerX, endY, 700);
     }
 
     public boolean didFeedScroll(String previousFeedState) {
@@ -807,18 +818,9 @@ public class FeedPage {
         return List.of(
                 namaskaraAction,
                 commentAction,
-                commentActionKn,
                 shareAction,
-                shareActionKn,
-                sendAction,
-                sendActionKn,
-                namaskaraAction,
                 saveAction,
-                saveActionKn,
-                moreOptionsAction,
-                moreOptionsActionKn,
-                collapseAction,
-                exportAction
+                moreOptionsAction
         );
     }
 
@@ -862,8 +864,7 @@ public class FeedPage {
         }
     }
 
-    /** True when a video row is currently audible - the toggle offers "Mute", meaning
-     * tapping it would mute. */
+    /** True when a video row is currently audible - the toggle offers "mute". */
     public boolean isVideoAudible() {
         return findAnyAction(List.of(muteAction));
     }
@@ -876,8 +877,8 @@ public class FeedPage {
         return findAnyAction(List.of(muteAction, unmuteAction));
     }
 
-    /** Video rows are interleaved with image posts, so the first screenful often has no
-     * volume toggle at all - scroll for one before deciding it is absent. */
+    /** Video rows are interleaved with image posts, and the toggle only shows on the focused
+     * (playing) video, so the first screenful often has none - scroll for one first. */
     public boolean scrollUntilVolumeToggleVisible() {
         if (isVolumeToggleVisible()) {
             return true;
@@ -891,21 +892,17 @@ public class FeedPage {
         return false;
     }
 
-    /** Real touch on the toggle's clickable ancestor, not click() on the icon. The icon is
-     * an Icon inside an IconButton, so the icon node itself reports clickable=false and an
-     * accessibility click on it is not reliably routed to the handler - the same dispatch
-     * problem that silently broke the bottom-nav taps. */
     public boolean tapVolumeToggle() {
         WebElement toggle = firstVisibleAction(List.of(muteAction, unmuteAction));
         if (toggle == null) {
             return false;
         }
-        BasePage.tapElementCenter(driver, BasePage.clickableAncestorOf(toggle));
+        BasePage.tapElementCenter(driver, toggle);
         return true;
     }
 
     /** Polls for the toggle to flip: the tap is dispatched to the player and the icon
-     * recomposes a moment later, so a single check races it. */
+     * re-renders a moment later, so a single check races it. */
     public boolean waitForVideoMuted() {
         return waitForActionGone(muteAction) && findAnyAction(List.of(unmuteAction));
     }
@@ -916,15 +913,11 @@ public class FeedPage {
 
     private boolean tapHomeIfVisible() {
         try {
-            WebElement homeElement = firstVisibleAction(homeActionLocators());
+            WebElement homeElement = firstVisibleAction(List.of(homeAction));
             if (homeElement != null) {
-                // Real touch on the clickable nav item, not click() on its label - see
-                // BasePage.clickableAncestorOf. Confirmed live: TC090 sat on a temple
-                // profile left over from the previous class while this recovery path
-                // silently did nothing. Same fix as HomePage.tap.
-                BasePage.tapElementCenter(driver, BasePage.clickableAncestorOf(homeElement));
+                homeElement.click();
                 new WebDriverWait(driver, DEFAULT_TIMEOUT)
-                        .until(ignored -> isAnyFeedItemVisible() || firstVisibleAction(createPostLocators()) != null);
+                        .until(ignored -> isAnyFeedItemVisible() || firstVisibleAction(List.of(createPostAction)) != null);
                 return true;
             }
         } catch (RuntimeException ignored) {
@@ -966,19 +959,20 @@ public class FeedPage {
         }
     }
 
+    /** Only Saved Posts asks to confirm an unsave; the Home feed toggles straight away. */
     private void dismissUnsaveDialogIfVisible() {
         try {
-            if (firstVisibleAction(unsaveDialogLocators()) != null) {
-                tapFirstVisible(cancelActionLocators());
+            if (!visibleElements(unsaveDialogAction).isEmpty()) {
+                tapFirstVisible(cancelAction);
             }
         } catch (RuntimeException ignored) {
-            // The save action may not show a confirmation dialog when saving an unsaved post.
+            // No confirmation shown.
         }
     }
 
     private void pressBackQuietly() {
         try {
-            driver.navigate().back();
+            BasePage.navigateBack(driver);
             Thread.sleep(500);
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
@@ -1006,16 +1000,7 @@ public class FeedPage {
     public void pullToRefreshFeed() {
         Dimension screen = driver.manage().window().getSize();
         int x = screen.getWidth() / 2;
-        int from = (int) (screen.getHeight() * 0.30);
-        int to = (int) (screen.getHeight() * 0.80);
-
-        PointerInput finger = new PointerInput(PointerInput.Kind.TOUCH, "finger");
-        Sequence drag = new Sequence(finger, 1);
-        drag.addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), x, from));
-        drag.addAction(finger.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
-        drag.addAction(finger.createPointerMove(Duration.ofMillis(800), PointerInput.Origin.viewport(), x, to));
-        drag.addAction(finger.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
-        driver.perform(Collections.singletonList(drag));
+        dragFinger(x, (int) (screen.getHeight() * 0.30), x, (int) (screen.getHeight() * 0.80), 800);
 
         try {
             new WebDriverWait(driver, DEFAULT_TIMEOUT).until(ignored -> isAnyFeedItemVisible());
@@ -1024,8 +1009,6 @@ public class FeedPage {
         }
     }
 
-    /** Polls until the locator stops matching. FeedPage predates BasePage and carries its
-     * own helpers, so it has no waitUntilGone of its own. */
     private boolean waitForActionGone(By locator) {
         try {
             return new WebDriverWait(driver, SCROLL_TIMEOUT)
@@ -1039,10 +1022,8 @@ public class FeedPage {
         if (firstVisibleAction(locators) != null) {
             return true;
         }
-        // "More options" only renders on someone else's post (own posts hide it by design -
-        // see FeedPostUiModel.showOptions), and the QA account's feed has accumulated many
-        // self-created posts from earlier test runs, so this needs more scroll headroom than
-        // the other action checks to reach a non-own post.
+        // "More options" only renders on someone else's post, and the QA account's feed has
+        // accumulated many self-created posts from earlier runs, so allow generous scrolling.
         for (int attempt = 0; attempt < 10; attempt++) {
             swipeUp();
             if (firstVisibleAction(locators) != null) {
@@ -1078,32 +1059,16 @@ public class FeedPage {
         return visibleCount;
     }
 
-    private List<By> homeActionLocators() {
-        return List.of(homeAction, homeActionKn);
-    }
-
-    private List<By> createPostLocators() {
-        return List.of(createPostAction, createPostTextAction, createTextAction);
-    }
-
-    private List<By> cancelActionLocators() {
-        return List.of(cancelAction, cancelActionKn);
-    }
-
-    private List<By> unsaveDialogLocators() {
-        return List.of(unsaveDialogAction, unsaveDialogActionKn);
-    }
-
     private List<By> likeActionLocators() {
         return List.of(namaskaraAction);
     }
 
     private List<By> commentActionLocators() {
-        return List.of(commentAction, commentActionKn);
+        return List.of(commentAction);
     }
 
     private List<By> shareActionLocators() {
-        return List.of(shareAction, shareActionKn, sendAction, sendActionKn);
+        return List.of(shareAction);
     }
 
     private List<By> namaskaraActionLocators() {
@@ -1111,18 +1076,18 @@ public class FeedPage {
     }
 
     private List<By> saveActionLocators() {
-        return List.of(saveAction, saveActionKn);
+        return List.of(saveAction);
     }
 
     private List<By> moreOptionsActionLocators() {
-        return List.of(moreOptionsAction, moreOptionsActionKn);
+        return List.of(moreOptionsAction);
     }
 
     private String elementState(WebElement element) {
         Point location = element.getLocation();
         Dimension size = element.getSize();
-        return element.getText() + ":"
-                + element.getAttribute("content-desc") + ":"
+        return element.getAttribute("name") + ":"
+                + element.getAttribute("label") + ":"
                 + location.getX() + ","
                 + location.getY() + ","
                 + size.getWidth() + "x"

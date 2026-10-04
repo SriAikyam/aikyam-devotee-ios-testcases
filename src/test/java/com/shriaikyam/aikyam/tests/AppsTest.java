@@ -12,10 +12,9 @@ import com.shriaikyam.aikyam.categories.P0;
 
 public class AppsTest extends BaseTest {
 
-    /** Land on the Apps screen itself before each case. A mini-app WebView left open by an
-     * earlier case keeps the bottom nav visible, so re-tapping the Apps tab does not pop
-     * it - confirmed live: seven of eight cases timed out with the Stotragalu mini-app
-     * still on screen. Backing out first, then entering from Home, clears it. */
+    /** Land on the Apps screen itself before each case. A mini-app left open by an
+     * earlier case is a full-screen push that re-tapping the Apps tab does not pop, so
+     * back out first, then enter from Home. */
     @Before
     public void returnToAppsScreen() {
         AppsPage appsPage = new AppsPage(driver);
@@ -40,7 +39,7 @@ public class AppsTest extends BaseTest {
         appsPage.openStotragalu();
         Assert.assertTrue("Stotragalu should open a mini-app WebView", appsPage.waitForMiniAppWebViewToLoad());
 
-        Assert.assertTrue("Device back should be dispatchable from the mini-app", appsPage.navigateBack());
+        Assert.assertTrue("Back should be dispatchable from the mini-app", appsPage.navigateBack());
         Assert.assertTrue("Apps screen should be visible again after navigating back", appsPage.isAppsScreenVisible());
     }
 

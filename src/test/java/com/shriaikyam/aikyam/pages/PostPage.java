@@ -1,133 +1,125 @@
 package com.shriaikyam.aikyam.pages;
 
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Dimension;
+import org.openqa.selenium.Point;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
+import java.util.List;
 
+/** Create Post: CreatePostView + CreatePostCaptionEditor + EmojiPickerView (all under
+ * FeatureFeed/Presentation). Every `id(...)` below is paired with a label/type fallback so
+ * the page still resolves before the identifiers land in those views. */
 public class PostPage extends BasePage {
 
+    // The Home feed's own entry point; its identifier belongs to the feed screen.
     private final By createPostAction = accessibilityId("Create Post");
-    private final By createPostScreen = accessibilityId("Create post screen");
-    private final By addMediaAction = accessibilityId("Add image or video");
-    private final By imageOption = accessibilityId("Image");
-    private final By videoOption = accessibilityId("Video");
-    private final By galleryOption = textContains("Gallery");
-    private final By cameraOption = textContains("Camera");
-    private final By captionEditor = accessibilityId("Caption editor");
-    private final By captionField = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().className(\"android.widget.EditText\")"
-    );
-    private final By captionPlaceholder = textContains("caption");
-    // Bold/Mention/Hashtag render as plain Text nodes ("B", "@", "#") with no
-    // contentDescription, so accessibility-id locators never match them.
-    private final By boldAction = text("B");
-    private final By emojiAction = accessibilityId("Emoji");
-    // The picker is a Compose AlertDialog; dismissing without picking an emoji means
-    // tapping its "Close" TextButton.
-    private final By emojiCloseAction = text("Close");
-    // Category tab-strip icons carry the section's own title as contentDescription
-    // (e.g. "Devotional", "Hearts") - confirmed via EmojiCatalog.kt/EmojiPicker.kt.
-    private final By emojiSearchPlaceholder = textContains("Search with text or emoji");
-    private final By emojiNoResultsText = text("No emojis found");
-    private final By mentionAction = text("@");
-    private final By hashtagAction = text("#");
-    private final By visibilityPrompt = textContains("Who can see this?");
-    private final By publicOption = text("Public");
-    private final By followingOption = text("Following");
-    private final By privateOption = text("Private");
-    private final By postAction = text("Post");
-    // The "Post" Text node always reports enabled=true even when the button is
-    // disabled - the real enabled/disabled state lives on its clickable parent.
-    private final By postButtonContainer = By.xpath("(//*[@text='Post'])[1]/..");
-    // The Android system Photo Picker (com.google.android.photopicker) exposes each
-    // still image with this exact description prefix, distinguishing it from videos
-    // ("Video taken on ... with duration ...") and broken/unloaded thumbnails.
-    private final By pickerFirstPhoto = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().descriptionStartsWith(\"Photo taken on\")"
-    );
-    // Same system Photo Picker, videos are described with "Video taken on ... with duration ...".
-    private final By pickerFirstVideo = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().descriptionStartsWith(\"Video taken on\")"
-    );
-    private final By pickerDoneAction = text("Done");
-    // DocumentsUI (the picker used below Android 13, where com.google.android.photopicker
-    // does not exist) carries no per-photo description at all - each entry is labelled
-    // with its filename. One locator per extension rather than one textMatches regex:
-    // verified live against this build, textMatches("(?i).*\\.(png|jpg)$") returns an
-    // EMPTY list because the backslash escape does not survive the UiAutomator expression
-    // string, while textContains(".png") matches and its click attaches the image.
-    // Extensions are listed explicitly so the .mp4 test assets in /sdcard/Download are
-    // never selected by an image test.
-    private final By[] documentsUiImageLabels = new By[] {
-            textContains(".png"), textContains(".jpg"),
-            textContains(".jpeg"), textContains(".webp")
-    };
-    private final By scheduleToggle = text("Schedule a Post?");
-    private final By pickDateAction = text("Pick date");
-    private final By scheduleDateTimeRequiredError = textContains("Pick a date and time to schedule this post");
-    private final By scheduleSubmitAction = text("Schedule");
-    private final By backAction = accessibilityId("Back");
-    // DiscardPostDialog.kt - confirmed via source, no contentDescription/testTag on
-    // either button, locate by exact text.
-    private final By discardDialogTitle = text("Discard post?");
-    private final By discardConfirmAction = text("Discard");
-    private final By keepEditingAction = text("Keep Editing");
-    private final By locationField = textContains("Enter your location");
-    // The mic hands off to the system's own speech-recognition dialog (a separate
-    // "Google" activity, not part of this app's Compose tree) - confirmed live via
-    // "Speak your caption..." rendering full-screen over Create Post. There is
-    // nothing further to assert inside it from here; isMicDialogVisible() only
-    // proves the hand-off happened.
-    private final By micAction = accessibilityId("Voice input");
+
+    private final By addMediaAction = id("createpost.addmedia");
+    private final By addMediaPlaceholder = textContains("Tap to upload");
+    private final By addMoreMediaAction = id("createpost.media.add");
+    private final By mediaEditAction = id("createpost.media.edit");
+    private final By mediaEditButton = button("label == 'Edit'");
+
+    // CreatePostCaptionTextView is a UITextView - the only TextView on this screen (location
+    // is a TextField). iOS shows no caption placeholder (see parity report).
+    private final By captionEditor = id("createpost.caption");
+    private final By captionField = By.className("XCUIElementTypeTextView");
+
+    private final By boldAction = id("createpost.bold");
+    private final By boldLabel = accessibilityId("Bold");
+    private final By emojiAction = id("createpost.emoji");
+    private final By emojiSymbol = button("name == 'face.smiling' OR label == 'Emoji' OR label == 'Smiling face'");
+    private final By mentionAction = id("createpost.mention");
+    private final By mentionSymbol = button("name == 'at' OR label == 'at' OR label == '@'");
+    private final By hashtagAction = id("createpost.hashtag");
+    private final By hashtagSymbol = button("name == 'number' OR label == 'number' OR label == '#'");
+    private final By micAction = id("createpost.mic");
+    private final By micLabel = accessibilityId("Voice input");
+    // iOS has no system speech dialog: the editor shows this prompt inline while listening.
     private final By micDialogPrompt = textContains("Speak your caption");
-    private final By saveDraftAction = text("Save Draft");
+
+    // EmojiPickerView, shown inline where the keyboard would be.
+    private final By emojiSearchField = id("emojipicker.search");
+    private final By emojiSearchPlaceholder = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeTextField' AND (placeholderValue == 'Search with text or emoji'"
+                    + " OR value == 'Search with text or emoji')");
+    private final By emojiCloseAction = id("emojipicker.close");
+    private final By emojiCloseLabel = button("label == 'Close'");
+    private final By emojiNoResultsText = text("No emojis found");
+
+    // The bottom bar button reads "Post", or "Schedule" while scheduling is on, and is
+    // disabled until at least one media item is attached.
+    private final By postAction = id("createpost.publish");
+    private final By postButton = button("label BEGINSWITH 'Post' OR label BEGINSWITH 'Schedule'");
+
+    private final By scheduleToggle = id("createpost.schedule");
+    private final By scheduleSwitch = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeSwitch' AND label CONTAINS 'Schedule a Post?'");
+    private final By scheduleDatePicker = id("createpost.schedule.date");
+    private final By scheduleDateLabel = textContains("Publish at");
+    // iOS pre-fills the date one hour ahead, so its only schedule validation is a past time.
+    private final By scheduleDateTimeRequiredError = textContains("Pick a time in the future to schedule this post");
+
+    private final By locationField = id("createpost.location");
+    private final By locationPlaceholder = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeTextField' AND (placeholderValue == 'Enter your location'"
+                    + " OR value == 'Enter your location')");
+
+    // PHPicker runs out of process; its cells are Images labelled "Photo, <date>" / "Video, <date>".
+    private final By pickerFirstPhoto = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeImage' AND label BEGINSWITH 'Photo'");
+    private final By pickerFirstVideo = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeImage' AND label BEGINSWITH 'Video'");
+    // Multi-select PHPicker (maxSelectionCount > 1) needs an explicit "Add".
+    private final By pickerAddAction = button("label == 'Add' OR label == 'Done'");
 
     public PostPage(IOSDriver driver) {
         super(driver);
     }
 
+    private static By button(String condition) {
+        return AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeButton' AND (" + condition + ")");
+    }
+
     public boolean openCreatePost() {
-        return tapFirstVisible(createPostAction, textContains("Create Post"), textContains("Create"));
+        return tapFirstVisible(createPostAction, textContains("Create Post"));
     }
 
     public void waitUntilLoaded() {
-        waitForAnyVisible(createPostScreen, addMediaAction, captionEditor, captionField, captionPlaceholder, postAction);
+        waitForAnyVisible(addMediaAction, addMediaPlaceholder, captionEditor, postAction, scheduleSwitch);
     }
 
     public boolean isCreatePostVisible() {
-        // captionField (a bare EditText class matcher) is deliberately excluded here:
-        // it also matches unrelated EditTexts on other screens (e.g. feed search/comment
-        // boxes), which previously caused this check to falsely report "already on
-        // Create Post" when the app was actually elsewhere.
-        return isAnyVisible(createPostScreen, addMediaAction, captionEditor, captionPlaceholder, postAction);
+        // captionField (a bare TextView class matcher) is excluded: it also matches text views
+        // on other screens and would report "already on Create Post" from elsewhere.
+        return isAnyVisible(addMediaAction, addMediaPlaceholder, captionEditor, postAction, scheduleSwitch);
     }
 
     public boolean isCaptionEditorVisible() {
-        return isAnyVisible(captionEditor, captionField, captionPlaceholder);
+        return isAnyVisible(captionEditor, captionField);
     }
 
     public boolean isCaptionToolbarVisible() {
-        return isAnyVisible(boldAction, emojiAction, mentionAction, hashtagAction);
+        return isAnyVisible(boldAction, boldLabel, emojiAction, emojiSymbol, mentionAction, mentionSymbol,
+                hashtagAction, hashtagSymbol);
     }
 
+    // iOS: Create Post has no audience/visibility picker; posts always go out Public (see parity report).
     public boolean isVisibilityOptionsVisible() {
-        // The visibility section sits below the caption box; it drops out of the
-        // accessibility tree entirely while the on-screen keyboard covers it.
-        hideKeyboardIfShown();
-        return isAnyVisible(visibilityPrompt, publicOption, followingOption, privateOption);
+        return false;
     }
 
     public boolean isPostButtonVisible() {
-        return isAnyVisible(postAction);
+        return isAnyVisible(postAction, postButton);
     }
 
     public boolean isPostButtonEnabled() {
-        // Enabling Post after a link-embed (e.g. a YouTube URL in the caption) depends
-        // on the app fetching link-preview metadata, so this must poll rather than
-        // check once - an immediate check can race the embed and read stale state.
+        // Polls: the button enables only once picked media has loaded into the grid.
         try {
             return new WebDriverWait(driver, DEFAULT_TIMEOUT).until(ignored -> isAnyPostButtonEnabled());
         } catch (RuntimeException exception) {
@@ -135,48 +127,31 @@ public class PostPage extends BasePage {
         }
     }
 
+    /** iOS has one PhotosPicker for images and videos (no Image/Video/Camera chooser), so
+     * both flows just open it. */
     public boolean startImagePostFlow() {
-        return tapFirstVisible(imageOption, textContains("Image"), addMediaAction, galleryOption, cameraOption);
+        return tapFirstVisible(addMediaAction, addMediaPlaceholder, addMoreMediaAction);
     }
 
     public boolean startVideoPostFlow() {
-        return tapFirstVisible(videoOption, textContains("Video"), addMediaAction, galleryOption, cameraOption);
+        return tapFirstVisible(addMediaAction, addMediaPlaceholder, addMoreMediaAction);
     }
 
-    /**
-     * Opens the media picker and attaches the first still image found in the device
-     * gallery (skipping videos and any broken/unloaded thumbnails). Requires the
-     * device gallery to contain at least one photo.
-     */
+    /** Opens the PhotosPicker and attaches the first still image in the simulator's library. */
     public boolean attachFirstGalleryImage() {
-        if (!tapFirstVisible(addMediaAction)) {
+        if (!tapFirstVisible(addMediaAction, addMediaPlaceholder, addMoreMediaAction)) {
             return false;
         }
-        // Which picker opens depends entirely on the OS version, so try both rather than
-        // assume. Confirmed live: on Android 15 the system Photo Picker opens and labels
-        // stills "Photo taken on ..."; on Android 10 that package does not exist at all
-        // (com.google.android.photopicker arrived in Android 13), so the app falls back to
-        // DocumentsUI, which labels entries by FILENAME. The "Photo taken on" selector can
-        // never match there, which stranded every image test on the API 29 emulator with
-        // the picker left open on screen.
-        if (!tapFirstVisible(pickerFirstPhoto) && !tapFirstVisible(documentsUiImageLabels)) {
+        if (!tapFirstVisible(pickerFirstPhoto)) {
             return false;
         }
-        // DocumentsUI returns to the caller the moment a file is chosen - it has no Done
-        // button - while the Photo Picker requires one. Absent is success, not failure.
-        if (!isVisibleNow(pickerDoneAction)) {
-            return true;
-        }
-        return tapFirstVisible(pickerDoneAction);
+        return confirmPickerSelection();
     }
 
-
-    /**
-     * Opens the media picker and attaches the first video found in the device gallery.
-     * Requires the device gallery to contain at least one video.
-     */
+    /** Opens the PhotosPicker and attaches the first video. Requires a video in the
+     * simulator's photo library (`xcrun simctl addmedia booted <file.mp4>`). */
     public boolean attachFirstGalleryVideo() {
-        if (!tapFirstVisible(addMediaAction)) {
+        if (!tapFirstVisible(addMediaAction, addMediaPlaceholder, addMoreMediaAction)) {
             return false;
         }
         if (!scrollUntilVisible(pickerFirstVideo)) {
@@ -185,52 +160,56 @@ public class PostPage extends BasePage {
         if (!tapFirstVisible(pickerFirstVideo)) {
             return false;
         }
-        return tapFirstVisible(pickerDoneAction);
+        return confirmPickerSelection();
     }
 
-    /** Tapping Back with unsaved content (caption or media present) shows the Discard
-     * confirmation dialog (DiscardPostDialog.kt) rather than navigating away directly. */
+    private boolean confirmPickerSelection() {
+        if (!isVisibleNow(pickerAddAction)) {
+            // Single-select pickers return on the tap itself.
+            return true;
+        }
+        return tapFirstVisible(pickerAddAction);
+    }
+
+    /** iOS dismisses Create Post straight away - there is no Discard dialog (see parity report). */
     public boolean tapBack() {
-        return tapFirstVisible(backAction);
+        return navigateBack();
     }
 
-    /** MediaGridThumbnailCell (CreatePostScreen.kt) gives the first attached image the
-     * contentDescription "Selected image 1" (ui_selected_image, 1-indexed) - tapping it
-     * opens the MediaEditorScreen overlay for that item. */
+    /** The pencil on a thumbnail opens CreatePostMediaEditorView for images and videos
+     * alike; tapping a video thumbnail itself only toggles its inline preview. */
     public boolean tapFirstMediaThumbnail() {
-        return tapFirstVisible(accessibilityId("Selected image 1"), accessibilityId("Video thumbnail 1"));
+        return tapFirstVisible(mediaEditAction, mediaEditButton);
     }
 
-    /** A keyboard left open from a leftover caption/search field can occlude the Back
-     * icon and other toolbar controls - dismiss it before interacting further. */
     public void dismissKeyboardIfShown() {
         hideKeyboardIfShown();
     }
 
+    // iOS: Create Post has no Discard/Keep Editing dialog; Back dismisses directly (see parity report).
     public boolean isDiscardDialogVisible() {
-        return isAnyVisible(discardDialogTitle);
+        return false;
     }
 
+    // iOS: Create Post has no Discard/Keep Editing dialog (see parity report).
     public boolean tapKeepEditing() {
-        return tapFirstVisible(keepEditingAction);
+        return false;
     }
 
+    // iOS: Create Post has no Discard/Keep Editing dialog (see parity report).
     public boolean tapDiscardConfirm() {
-        return tapFirstVisible(discardConfirmAction);
+        return false;
     }
 
     public boolean addCaption(String caption) {
-        if (!typeIntoFirstVisible(caption, captionEditor, captionField, captionPlaceholder)) {
+        if (!typeIntoFirstVisible(caption, captionEditor, captionField)) {
             return false;
         }
         if (isCaptionPresent(caption)) {
             return true;
         }
-        // Typing a caption containing a URL can race the app's link-preview/auto-embed
-        // recompose mid-keystroke (observed: duplicated/truncated text, e.g. "...
-        // https://www.youtube.Regression post ... https://www.youtube.com/watch?v=").
-        // Retry once now that any recompose triggered by the first attempt has settled.
-        return typeIntoFirstVisible(caption, captionEditor, captionField, captionPlaceholder)
+        // One retry in case the first keystrokes landed while the field was still taking focus.
+        return typeIntoFirstVisible(caption, captionEditor, captionField)
                 && isCaptionPresent(caption);
     }
 
@@ -239,75 +218,67 @@ public class PostPage extends BasePage {
     }
 
     public boolean toggleBold() {
-        return tapFirstVisible(boldAction);
+        return tapFirstVisible(boldAction, boldLabel);
     }
 
-    /** Idempotent: if a prior test left the picker open (e.g. an unverified
-     * closeEmojiPicker() call), tapping the underlying "Emoji" icon again is a stray
-     * tap on the dialog now covering it - confirmed live, Compose keeps occluded nodes
-     * reporting visible/clickable in the accessibility tree (same quirk documented on
-     * MusicPage). Check for the picker's own search field first instead. */
+    /** Idempotent: if the panel is already open its search field is showing. */
     public boolean openEmojiPicker() {
-        if (isAnyVisible(emojiSearchPlaceholder)) {
+        if (isVisibleNow(emojiSearchField, emojiSearchPlaceholder)) {
             return true;
         }
-        return tapFirstVisible(emojiAction);
+        return tapFirstVisible(emojiAction, emojiSymbol);
     }
 
     public boolean closeEmojiPicker() {
-        return tapFirstVisible(emojiCloseAction);
+        return tapFirstVisible(emojiCloseAction, emojiCloseLabel);
     }
 
+    /** The tab strip is icon-only on iOS, so this matches the category's section header in
+     * the emoji grid (visible once that section is on screen). */
     public boolean isEmojiCategoryVisible(String categoryLabel) {
         return isAnyVisible(accessibilityId(categoryLabel), text(categoryLabel));
     }
 
     public boolean searchEmoji(String query) {
-        return typeIntoFirstVisible(query, emojiSearchPlaceholder);
+        return typeIntoFirstVisible(query, emojiSearchField, emojiSearchPlaceholder);
     }
 
     public boolean isNoEmojisFoundVisible() {
         return isAnyVisible(emojiNoResultsText);
     }
 
-    /** Taps an emoji cell by its exact glyph (EmojiCell renders the raw string, no
-     * contentDescription) and returns whether it landed in the caption. */
+    /** Emoji cells are Buttons labelled with the raw glyph. */
     public boolean selectEmojiAndConfirmInserted(String emojiGlyph) {
-        if (!tapFirstVisible(text(emojiGlyph))) {
+        if (!tapFirstVisible(button("label == " + predicateLiteral(emojiGlyph)), text(emojiGlyph))) {
             return false;
         }
         return isCaptionPresent(emojiGlyph);
     }
 
     public boolean insertMentionSymbol() {
-        return tapFirstVisible(mentionAction);
+        return tapFirstVisible(mentionAction, mentionSymbol);
     }
 
     public boolean insertHashtagSymbol() {
-        return tapFirstVisible(hashtagAction);
+        return tapFirstVisible(hashtagAction, hashtagSymbol);
     }
 
     public boolean tapPost() {
-        return tapFirstVisible(postAction);
+        return tapFirstVisible(postAction, postButton);
     }
 
-    /**
-     * Sends the app to background (simulating the user switching away mid-upload) and
-     * waits for it to be automatically foregrounded again after the given duration.
-     */
     public void backgroundAppFor(Duration duration) {
         driver.runAppInBackground(duration);
     }
 
-    /** Negative complement to isPostButtonEnabled(): true only if every matching
-     * container is confirmed disabled (not merely "not yet confirmed enabled"), so a
-     * transient/unfound element can't be mistaken for a real disabled state. */
+    /** True only if every matching button is confirmed disabled, so an element that was not
+     * found can't be mistaken for a disabled one. */
     public boolean isPostButtonDisabled() {
-        java.util.List<WebElement> containers = driver.findElements(postButtonContainer);
-        if (containers.isEmpty()) {
+        List<WebElement> buttons = postButtons();
+        if (buttons.isEmpty()) {
             return false;
         }
-        for (WebElement element : containers) {
+        for (WebElement element : buttons) {
             try {
                 if (element.isEnabled()) {
                     return false;
@@ -320,42 +291,58 @@ public class PostPage extends BasePage {
     }
 
     public boolean isScheduleToggleVisible() {
-        return isAnyVisible(scheduleToggle);
+        hideKeyboardIfShown();
+        return scrollUntilVisible(scheduleToggle, scheduleSwitch);
     }
 
-    /** Toggles scheduling on and confirms via a real state signal - the date/time
-     * picker rows only render once scheduling is actually enabled, not just because
-     * the toggle Text was tappable. No-ops (returns true) if already enabled. */
+    /** Turns scheduling on and confirms it via the "Publish at" date picker that only
+     * renders once it is on. No-ops (returns true) if already enabled. */
     public boolean enableSchedulePost() {
-        if (isAnyVisible(pickDateAction)) {
+        hideKeyboardIfShown();
+        if (!scrollUntilVisible(scheduleToggle, scheduleSwitch)) {
+            return false;
+        }
+        if (isVisibleNow(scheduleDatePicker, scheduleDateLabel)) {
             return true;
         }
-        tapFirstVisible(scheduleToggle);
-        return isAnyVisible(pickDateAction);
+        try {
+            WebElement toggle = waitForAnyVisible(scheduleToggle, scheduleSwitch);
+            // A SwiftUI Toggle spans the row, and a tap on its centre lands on the label,
+            // which does not flip it - tap the switch at the trailing edge instead.
+            Point location = toggle.getLocation();
+            Dimension size = toggle.getSize();
+            tapPoint(location.getX() + size.getWidth() - 30, location.getY() + size.getHeight() / 2);
+        } catch (RuntimeException exception) {
+            return false;
+        }
+        return isAnyVisible(scheduleDatePicker, scheduleDateLabel);
     }
 
     public boolean tapScheduleSubmit() {
-        return tapFirstVisible(scheduleSubmitAction);
+        return tapFirstVisible(postAction, button("label BEGINSWITH 'Schedule'"));
     }
 
+    /** iOS validates only a past time (alert "Pick a time in the future..."); it never
+     * asks for a missing date because the picker is pre-filled. */
     public boolean isScheduleDateTimeRequiredErrorVisible() {
         return isAnyVisible(scheduleDateTimeRequiredError);
     }
 
     public boolean enterLocation(String location) {
-        return typeIntoFirstVisible(location, locationField);
+        hideKeyboardIfShown();
+        scrollBackUntilVisible(locationField, locationPlaceholder);
+        return typeIntoFirstVisible(location, locationField, locationPlaceholder);
     }
 
     public boolean isLocationPresent(String location) {
         return isAnyVisible(textContains(location));
     }
 
-    /** Taps the caption toolbar's mic icon and confirms the hand-off to the system
-     * speech-recognition dialog ("Speak your caption...") actually happened - this is
-     * as far as automation can verify without a real microphone input on the test
-     * device/emulator; what the recognizer transcribes is outside this app's own UI. */
+    /** Taps the caption toolbar mic and confirms listening started - iOS shows the
+     * "Speak your caption..." prompt inline in the toolbar instead of a system dialog. The
+     * first run on a simulator raises the Speech/Microphone permission alerts first. */
     public boolean tapMicAndConfirmDialogOpens() {
-        if (!tapFirstVisible(micAction)) {
+        if (!tapFirstVisible(micAction, micLabel)) {
             return false;
         }
         try {
@@ -366,25 +353,34 @@ public class PostPage extends BasePage {
         }
     }
 
-    /** Dismisses the system speech dialog via device Back, returning to Create Post. */
+    /** The mic button toggles listening off again; there is no dialog to back out of. */
     public void dismissMicDialog() {
         try {
-            driver.navigate().back();
+            if (isVisibleNow(micDialogPrompt)) {
+                tapFirstVisible(micAction, micLabel);
+            }
         } catch (RuntimeException ignored) {
             // Best-effort.
         }
     }
 
+    // iOS: Create Post has no Save Draft action (no draft persistence, see parity report).
     public boolean isSaveDraftVisible() {
-        return isAnyVisible(saveDraftAction);
+        return false;
     }
 
+    // iOS: Create Post has no Save Draft action (no draft persistence, see parity report).
     public boolean tapSaveDraft() {
-        return tapFirstVisible(saveDraftAction);
+        return false;
+    }
+
+    private List<WebElement> postButtons() {
+        List<WebElement> byId = driver.findElements(postAction);
+        return byId.isEmpty() ? driver.findElements(postButton) : byId;
     }
 
     private boolean isAnyPostButtonEnabled() {
-        for (WebElement element : driver.findElements(postButtonContainer)) {
+        for (WebElement element : postButtons()) {
             try {
                 if (element.isEnabled()) {
                     return true;

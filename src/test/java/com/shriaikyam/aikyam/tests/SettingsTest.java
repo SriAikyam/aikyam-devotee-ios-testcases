@@ -59,10 +59,10 @@ public class SettingsTest extends BaseTest {
     public void TC117_Verify_Open_Source_Licenses_Screen_Opens() {
         SettingsPage settingsPage = openSettingsHub();
 
-        Assert.assertTrue("About Aikyam -> Open source licences should be reachable",
+        Assert.assertTrue("About Aikyam -> Open Source Licenses should be reachable",
                 settingsPage.openOpenSourceLicensesFromAboutAikyam());
-        Assert.assertTrue("Open source licences screen should be visible",
-                settingsPage.isDestinationTitleVisible("Open source licences"));
+        Assert.assertTrue("Open Source Licenses screen should be visible",
+                settingsPage.isDestinationTitleVisible("Open Source Licenses"));
         // Two levels deep (About Aikyam -> Open source licences) - two pops needed.
         settingsPage.navigateBack();
         settingsPage.navigateBack();
@@ -134,7 +134,8 @@ public class SettingsTest extends BaseTest {
             if (!loginPage.isPhoneNumberScreenVisible()) {
                 return;
             }
-            String otp = com.shriaikyam.aikyam.utils.DeviceSmsReader.readLatestAikyamOtp(java.time.Duration.ofSeconds(45));
+            // iOS simulator has no SMS inbox; the OTP comes only from the environment.
+            String otp = System.getenv("AIKYAM_TEST_OTP");
             loginPage.enterPhoneNumber(System.getenv("AIKYAM_TEST_PHONE"));
             loginPage.tapSendVerificationCode();
             loginPage.dismissSmsConsentIfPresent();

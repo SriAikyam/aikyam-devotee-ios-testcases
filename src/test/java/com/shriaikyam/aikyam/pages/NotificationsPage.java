@@ -1,5 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.StaleElementReferenceException;
@@ -8,42 +9,49 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
 
-/** Notification surfaces of the devotee app: the Home top-bar bell (Screen.Notifications entry),
- * the Notifications placeholder screen, and the Notifications switch on the Settings hub. */
+/** Notification surfaces of the devotee app. On iOS that is only the Settings hub's
+ * Notifications switch (SettingsView.settingsRowWithToggle). */
 public class NotificationsPage extends BasePage {
 
-    private final By bell = accessibilityId("Notifications");
     private final By settingsRowLabel = text("Notifications");
-    // The Compose Switch is a checkable+clickable sibling of the row's title Text.
-    private final By settingsSwitch = By.xpath(
-            "//*[@text='Notifications']/following-sibling::*[@checkable='true']");
-    private final By permissionDialogDeny = By.xpath(
-            "//*[@resource-id='com.android.permissioncontroller:id/permission_deny_button']");
+    private final By settingsSwitch = id("settings.notifications.toggle");
+    private final By permissionDialogDeny = AppiumBy.iOSClassChain(
+            "**/XCUIElementTypeAlert/**/XCUIElementTypeButton[`label == \"Don’t Allow\" OR label == \"Don't Allow\"`]");
 
     public NotificationsPage(IOSDriver driver) {
         super(driver);
     }
 
-    /** Bell on whatever top bar is showing right now. */
+    /** iOS: no top bar has a notifications bell - FeedTopBar is create-post + avatar only
+     * (see parity report). */
     public boolean isBellVisible() {
-        return isAnyVisible(bell);
+        return false;
     }
 
+    /** iOS: no notifications bell to tap (see parity report). */
     public boolean tapBell() {
-        return tapFirstVisible(bell);
+        return false;
     }
 
+    /** iOS: there is no Notifications placeholder screen (see parity report). */
     public boolean isComingSoonShown() {
-        return isAnyVisible(text("Coming Soon"));
+        return false;
     }
 
     public boolean scrollToSettingsRow() {
-        return scrollUntilVisible(settingsRowLabel);
+        return scrollUntilVisible(settingsSwitch, settingsRowLabel);
     }
 
-    /** "true"/"false" of the switch's checked attribute. */
+    /** "true"/"false" - an XCUIElementTypeSwitch reports its state as value "1"/"0". */
     public String switchChecked() {
-        return waitSwitch().getAttribute("checked");
+        String value = waitSwitch().getAttribute("value");
+        if ("1".equals(value)) {
+            return "true";
+        }
+        if ("0".equals(value)) {
+            return "false";
+        }
+        return value;
     }
 
     private WebElement waitSwitch() {
@@ -52,12 +60,24 @@ public class NotificationsPage extends BasePage {
                 .until(d -> d.findElements(settingsSwitch).stream().findFirst().orElse(null));
     }
 
+    /** Taps the switch itself, not its row: a SwiftUI Toggle row is one element whose
+     * centre is the label area, which does not flip it. */
     public void tapSwitch() {
-        waitSwitch().click();
+        WebElement toggle = waitSwitch();
+        try {
+            WebElement knob = toggle.findElement(AppiumBy.className("XCUIElementTypeSwitch"));
+            knob.click();
+        } catch (RuntimeException noInnerSwitch) {
+            toggle.click();
+        }
     }
 
     /** Waits until the switch reports the wanted state; denies (never grants) a system
-     * permission dialog if one appears. Returns the final state. */
+     * permission dialog if one appears. Returns the final state.
+     *
+     * Note: with autoAcceptAlerts the notification prompt is accepted before this sees it;
+     * if permission is denied instead, SettingsView flips the switch back off and opens
+     * the system Settings app. */
     public String awaitSwitch(boolean wanted) {
         long end = System.currentTimeMillis() + 15000;
         String state = null;
@@ -71,7 +91,7 @@ public class NotificationsPage extends BasePage {
                     return state;
                 }
             } catch (RuntimeException ignored) {
-                // transient recomposition; retry
+                // Transient re-render; retry.
             }
             try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
         }

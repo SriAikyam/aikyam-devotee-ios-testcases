@@ -14,20 +14,35 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
- * The feed's circle strip (All Posts / Temples / Live / people). In this build a person circle
- * does NOT open a status viewer: it scopes the feed to that person (ring on the circle, unseen
- * blue dot cleared). The ring and dot are painted, not exposed to accessibility, so they are read
- * from screenshot pixels. Standalone (FeedPage is not a BasePage).
+ * The feed's circle strip (FeedSubscriberStripViews: All Posts / Temples / Live / followed
+ * accounts). A person circle does NOT open a status viewer: it scopes the feed to that person
+ * and moves the selection ring onto it. The ring is painted, not exposed to accessibility, so
+ * it is read from screenshot pixels. Standalone (FeedPage is not a BasePage).
  */
 public class StoriesPage {
 
     private static final Duration WAIT = Duration.ofSeconds(15);
-    private static final Set<String> FIXED = Set.of("All Posts", "Temples", "Live");
+    private static final Duration IMPLICIT_TIMEOUT = Duration.ofSeconds(5);
+    /** AppAvatarSize.ring: every strip circle is 58pt, drawn at the top of its column button. */
+    private static final int CIRCLE_DIAMETER = 58;
+
+    private final By strip = AppiumBy.accessibilityId("stories.strip");
+    private final By personCircle = AppiumBy.accessibilityId("stories.circle");
+    private final By scrollLeft = AppiumBy.accessibilityId("stories.scrollLeft");
+    private final By scrollRight = AppiumBy.accessibilityId("stories.scrollRight");
+    private final By allPostsCircle = AppiumBy.accessibilityId("feed.filter.allPosts");
+    private final By templesCircle = AppiumBy.accessibilityId("feed.filter.temples");
+    private final By liveCircle = AppiumBy.accessibilityId("feed.filter.live");
+    private final By postAuthor = AppiumBy.accessibilityId("feed.post.author");
+    private final By viewerPage = AppiumBy.accessibilityId("stories.viewer.page");
+    private final By viewerEmpty = AppiumBy.accessibilityId("stories.viewer.empty");
 
     private final IOSDriver driver;
 
@@ -35,21 +50,39 @@ public class StoriesPage {
         this.driver = driver;
     }
 
-    private int height() {
-        return driver.manage().window().getSize().getHeight();
+    private List<WebElement> visible(By locator) {
+        try {
+            driver.manage().timeouts().implicitlyWait(Duration.ZERO);
+            try {
+                return driver.findElements(locator).stream()
+                        .filter(WebElement::isDisplayed)
+                        .collect(Collectors.toList());
+            } finally {
+                driver.manage().timeouts().implicitlyWait(IMPLICIT_TIMEOUT);
+            }
+        } catch (RuntimeException e) {
+            return new ArrayList<>();
+        }
     }
 
-    /** Fully visible person-circle avatar nodes (content-desc = name) inside the strip band. */
+    /** Horizontal bounds of the strip's scroll viewport (the window when it is not found). */
+    private int[] stripBounds() {
+        List<WebElement> s = visible(strip);
+        if (!s.isEmpty()) {
+            Rectangle r = s.get(0).getRect();
+            return new int[] {r.getX(), r.getX() + r.getWidth()};
+        }
+        return new int[] {0, driver.manage().window().getSize().getWidth()};
+    }
+
+    /** Person-circle column buttons fully inside the strip's viewport. */
     private List<WebElement> stripAvatars() {
-        int limit = (int) (height() * 0.20);
-        List<WebElement> all = driver.findElements(By.xpath("//android.view.View[@content-desc!='']"));
+        int[] bounds = stripBounds();
+        List<WebElement> all = visible(personCircle);
         all.removeIf(e -> {
             try {
                 Rectangle r = e.getRect();
-                String d = e.getAttribute("content-desc");
-                return r.getY() < height() * 0.10 || r.getY() + r.getHeight() > limit
-                        || FIXED.contains(d) || d.startsWith("Scroll") || d.equals("Create Post")
-                        || d.equals("Profile") || d.equals("AIKYAM") || r.getWidth() < 100;
+                return r.getX() < bounds[0] || r.getX() + r.getWidth() > bounds[1];
             } catch (StaleElementReferenceException gone) {
                 return true;
             }
@@ -57,12 +90,16 @@ public class StoriesPage {
         return all;
     }
 
+    private static String nameOf(WebElement e) {
+        return FeedPage.displayNameFromLabel(e.getAttribute("label"));
+    }
+
     /** Names of the person circles currently fully visible in the strip, left to right. */
     public Set<String> visibleCircleNames() {
         try {
             Set<String> names = new LinkedHashSet<>();
             for (WebElement e : stripAvatars()) {
-                names.add(e.getAttribute("content-desc").trim());
+                names.add(nameOf(e));
             }
             return names;
         } catch (StaleElementReferenceException recomposed) {
@@ -72,7 +109,7 @@ public class StoriesPage {
 
     private WebElement avatar(String name) {
         for (WebElement e : stripAvatars()) {
-            if (name.equals(e.getAttribute("content-desc").trim())) {
+            if (name.equals(nameOf(e))) {
                 return e;
             }
         }
@@ -88,21 +125,16 @@ public class StoriesPage {
         return true;
     }
 
-    /** Distinct authors on the visible post headers below the strip (clickable avatar nodes). */
+    /** Distinct display names on the visible post headers below the strip. */
     public Set<String> visiblePostAuthors() {
         Set<String> authors = new LinkedHashSet<>();
-        int top = (int) (height() * 0.20);
-        for (WebElement e : driver.findElements(By.xpath("//*[@clickable='true' and @content-desc!='']"))) {
+        for (WebElement e : visible(postAuthor)) {
             try {
-                Rectangle r = e.getRect();
-                String d = e.getAttribute("content-desc");
-                if (r.getY() > top && r.getX() < 150 && r.getWidth() < 200
-                        && !d.equals("More options") && !d.equals("Namaskara") && !d.equals("Save")
-                        && !d.equals("Share") && !d.equals("Comment")) {
-                    authors.add(d.trim());
+                if (e.getRect().getY() >= 0) {
+                    authors.add(nameOf(e));
                 }
             } catch (StaleElementReferenceException skip) {
-                // recomposed mid-read
+                // re-rendered mid-read
             }
         }
         return authors;
@@ -118,23 +150,11 @@ public class StoriesPage {
     }
 
     public boolean isStatusViewerOpen() {
-        return !driver.findElements(AppiumBy.accessibilityId("Close")).isEmpty()
-                && !driver.findElements(AppiumBy.androidUIAutomator("new UiSelector().text(\"Reply\")")).isEmpty();
+        return !visible(viewerPage).isEmpty() || !visible(viewerEmpty).isEmpty();
     }
 
-    /** Taps the Live circle (its icon node carries the "Live" content-desc; the text label is not clickable). */
     public boolean tapLiveCircle() {
-        for (WebElement e : driver.findElements(AppiumBy.accessibilityId("Live"))) {
-            if (e.getRect().getY() < height() * 0.20) {
-                e.click();
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean tapScrollRight() {
-        List<WebElement> l = driver.findElements(AppiumBy.accessibilityId("Scroll right"));
+        List<WebElement> l = visible(liveCircle);
         if (l.isEmpty()) {
             return false;
         }
@@ -142,13 +162,36 @@ public class StoriesPage {
         return true;
     }
 
+    /** The arrows collapse to zero width (and opacity 0) when there is nothing to scroll to. */
+    private WebElement arrow(By locator) {
+        for (WebElement e : visible(locator)) {
+            if (e.getRect().getWidth() > 0) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    public boolean tapScrollRight() {
+        WebElement e = arrow(scrollRight);
+        if (e == null) {
+            return false;
+        }
+        e.click();
+        return true;
+    }
+
     public boolean isScrollLeftVisible() {
-        return !driver.findElements(AppiumBy.accessibilityId("Scroll left")).isEmpty();
+        return arrow(scrollLeft) != null;
     }
 
     public void scrollStripToStart() {
-        for (int i = 0; i < 8 && isScrollLeftVisible(); i++) {
-            driver.findElement(AppiumBy.accessibilityId("Scroll left")).click();
+        for (int i = 0; i < 8; i++) {
+            WebElement e = arrow(scrollLeft);
+            if (e == null) {
+                return;
+            }
+            e.click();
             try {
                 Thread.sleep(700);
             } catch (InterruptedException ie) {
@@ -194,49 +237,46 @@ public class StoriesPage {
         return false;
     }
 
-    /** True when the named circle shows the blue unseen dot at its bottom-right corner. */
+    /** iOS: FeedSubscriberCircle draws no unseen dot (see parity report), so there is never
+     * one to find. Still fails loudly when the circle itself is not on screen. */
     public boolean hasUnseenDot(String name) {
-        WebElement e = avatar(name);
-        if (e == null) {
+        if (avatar(name) == null) {
             throw new IllegalStateException("circle not visible: " + name);
         }
-        Rectangle r = e.getRect();
-        BufferedImage img = screenshot();
-        double scale = img.getWidth() / (double) driver.manage().window().getSize().getWidth();
-        int cx = (int) ((r.getX() + r.getWidth() / 2.0 + 47) * scale);
-        int cy = (int) ((r.getY() + r.getHeight() / 2.0 + 48) * scale);
-        return hasColour(img, cx, cy, 12, 33, 150, 243, 60);
+        return false;
     }
 
-    /** True when the named circle (or All Posts / Temples / Live via its label) wears the brand ring. */
+    /** True when the named circle (or All Posts / Temples / Live) wears the selection ring
+     * (AppColor.primarySelection #EC496C, 2pt stroke on the 58pt circle's edge). */
     public boolean hasSelectedRing(String name) {
-        Rectangle r = ringAnchor(name);
+        Rectangle column = ringAnchor(name);
         BufferedImage img = screenshot();
         double scale = img.getWidth() / (double) driver.manage().window().getSize().getWidth();
-        int cx = (int) ((r.getX() + r.getWidth() / 2.0) * scale);
-        int cy = (int) ((r.getY() + r.getHeight() / 2.0) * scale);
-        int radius = (int) (r.getWidth() / 2.0 * 1.0 * scale);
-        // ring colour is the brand red/pink; probe the leftmost edge band of the circle
-        return hasColour(img, cx - radius + 6, cy, 8, 226, 60, 90, 60);
+        double cx = column.getX() + column.getWidth() / 2.0;
+        double cy = column.getY() + CIRCLE_DIAMETER / 2.0;
+        // Probe the circle's leftmost edge band, outside the 52pt avatar it surrounds.
+        int px = (int) ((cx - CIRCLE_DIAMETER / 2.0) * scale);
+        int py = (int) (cy * scale);
+        return hasColour(img, px, py, (int) Math.max(2, 2 * scale), 236, 73, 108, 50);
     }
 
+    /** The column button of the named circle; the circle sits at its top, centred. */
     private Rectangle ringAnchor(String name) {
-        if (FIXED.contains(name)) {
-            // fixed circles: the labelled icon node sits at the circle centre; the circle is 58dp
-            List<WebElement> l = driver.findElements(AppiumBy.accessibilityId(name));
-            for (WebElement e : l) {
-                Rectangle r = e.getRect();
-                if (r.getY() < height() * 0.20) {
-                    return new Rectangle(r.getX() + r.getWidth() / 2 - 76, r.getY() + r.getHeight() / 2 - 76, 152, 152);
-                }
+        By fixed = "All Posts".equals(name) ? allPostsCircle
+                : "Temples".equals(name) ? templesCircle
+                : "Live".equals(name) ? liveCircle
+                : null;
+        if (fixed != null) {
+            List<WebElement> l = visible(fixed);
+            if (l.isEmpty()) {
+                throw new IllegalStateException("fixed circle not visible: " + name);
             }
-            throw new IllegalStateException("fixed circle not visible: " + name);
+            return l.get(0).getRect();
         }
         WebElement e = avatar(name);
         if (e == null) {
             throw new IllegalStateException("circle not visible: " + name);
         }
-        Rectangle r = e.getRect();
-        return new Rectangle(r.getX() + r.getWidth() / 2 - 76, r.getY() + r.getHeight() / 2 - 76, 152, 152);
+        return e.getRect();
     }
 }
