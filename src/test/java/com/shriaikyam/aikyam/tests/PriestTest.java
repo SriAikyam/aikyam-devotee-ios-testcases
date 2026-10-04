@@ -20,12 +20,8 @@ import org.junit.runners.MethodSorters;
  * in between - and every other class that runs after this one - finds the session in
  * the state it expects.
  *
- * TC163/TC168 encode a confirmed, currently-reproducing defect: Orders and Order History
- * both render the literal string "No active temple context found" instead of order data
- * or a designed empty state, on both Android 10 and 11. TC169 is the contrast case (Your
- * Posts on the same account, same session, shows a correct empty state) that is what
- * confirms this is scoped to the orders/booking data path rather than a blanket session
- * failure. TC163/TC168 are expected to FAIL until the underlying bug is fixed.
+ * TC168 asserts Order History does not render the raw "No active temple context" error
+ * instead of order data or a designed empty state.
  */
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PriestTest extends BaseTest {
@@ -51,9 +47,8 @@ public class PriestTest extends BaseTest {
         Assert.assertTrue("Apps should be marked Coming Soon", priestPage.isAppsComingSoonVisible());
     }
 
-    /** Regression test - see class doc. Expected to FAIL until fixed. Reached via the
-     * priest Settings screen (not the Orders tab) - the same error appearing here too
-     * is what confirms this is a data-path bug, not specific to one screen. */
+    /** Regression test - see class doc. Reached via the priest Settings screen (not the
+     * Orders tab). */
     @Test
     public void TC168_Verify_Priest_Settings_Order_History_Does_Not_Show_Session_Error() {
         ProfilePage profilePage = new ProfilePage(driver);

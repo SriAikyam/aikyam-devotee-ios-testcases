@@ -1,6 +1,7 @@
 package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.HomePage;
 import com.shriaikyam.aikyam.pages.NotificationsPage;
 import com.shriaikyam.aikyam.pages.ProfilePage;
@@ -8,11 +9,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 /**
- * Notifications journeys. Source facts (app repo, read-only): Screen.Notifications is only
- * navigated from the dashboard/community top bar's onNotificationClick, but the shared top
- * bar (rememberAppBarConfig) builds no bell action, so the screen - itself just a "Coming Soon"
- * placeholder with no rows - has no user entry point. The only live notification control is the
- * Settings hub's Notifications switch.
+ * Notifications journeys. No iOS top bar carries a notifications bell and there is no
+ * Notifications screen, so the only live notification control is the Settings hub's
+ * Notifications switch.
  */
 public class NotificationsJourneyTest extends BaseTest {
 
@@ -71,7 +70,7 @@ public class NotificationsJourneyTest extends BaseTest {
     private void backToHome() {
         HomePage home = new HomePage(driver);
         for (int i = 0; i < 3 && !home.isHomeTabVisible(); i++) {
-            driver.navigate().back();
+            BasePage.navigateBack(driver);
         }
         home.tapHomeTab();
     }

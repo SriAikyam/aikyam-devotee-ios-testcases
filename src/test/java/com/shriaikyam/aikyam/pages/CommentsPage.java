@@ -1,43 +1,34 @@
 package com.shriaikyam.aikyam.pages;
 
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Rectangle;
 import org.openqa.selenium.WebElement;
-import java.util.List;
 
-/** Reached via FeedPage.tapFirstCommentAction(). Send only renders once the comment
- * text is non-blank (confirmed via source read) - its absence with empty input is a
- * genuine negative check, not a missing locator. Adding a comment does not
- * optimistically insert it; the screen refetches the whole list once the backend call
- * completes, so waitForCommentToAppear() must poll rather than check once. */
+/** CommentsView, reached via FeedPage.tapFirstCommentAction() (presented as a sheet from the
+ * Home feed). Send only renders once the composer text is non-blank - its absence with empty
+ * input is a genuine negative check, not a missing locator. */
 public class CommentsPage extends BasePage {
 
-    private final By titleLabel = text("Comments");
-    private final By commentInputPlaceholder = textContains("What do you think of this?");
-    private final By commentInputField = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().className(\"android.widget.EditText\")"
-    );
-    private final By sendAction = accessibilityId("Send");
-    private final By noCommentsYetText = text("No comments yet");
-    private final By backAction = accessibilityId("Back");
-    // First default EmojiBar item (CommentsCommon.kt's defaultEmojis list) - guaranteed
-    // first unless the account has "recent" emojis prepended ahead of it.
-    private final By firstEmojiBarItem = text("🙏");
-    // "Reply" is a plain Text node under each comment (CommentsCommon.kt) - tapping the
-    // first one on screen replies to whichever comment happens to render first.
-    private final By replyAction = text("Reply");
+    // Title is "Comments" while loading and "Comments (N)" once the total is known.
+    private final By titleLabel = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeStaticText' AND label BEGINSWITH 'Comments' AND name != 'comments.text'");
+    private final By commentInputField = id("comments.input");
+    private final By sendAction = id("comments.send");
+    private final By noCommentsYetText = id("comments.empty");
+    private final By replyAction = id("comments.reply");
 
     public CommentsPage(IOSDriver driver) {
         super(driver);
     }
 
     public void waitUntilLoaded() {
-        waitForAnyVisible(titleLabel, commentInputPlaceholder, commentInputField, noCommentsYetText);
+        waitForAnyVisible(titleLabel, commentInputField, noCommentsYetText);
     }
 
     public boolean isCommentsScreenVisible() {
-        return isAnyVisible(titleLabel, commentInputPlaceholder, commentInputField);
+        return isAnyVisible(titleLabel, commentInputField);
     }
 
     public boolean isNoCommentsEmptyStateVisible() {
@@ -51,7 +42,7 @@ public class CommentsPage extends BasePage {
     }
 
     public boolean typeComment(String text) {
-        return typeIntoFirstVisible(text, commentInputField, commentInputPlaceholder);
+        return typeIntoFirstVisible(text, commentInputField);
     }
 
     public boolean isSendActionVisible() {
@@ -62,19 +53,47 @@ public class CommentsPage extends BasePage {
         return tapFirstVisible(sendAction);
     }
 
-    /** Adding a comment triggers a full list refetch (not an optimistic insert) before
-     * it appears - poll rather than check once immediately after tapSend(). */
+    /** The new comment lands after the backend round-trip - poll rather than check once
+     * immediately after tapSend(). */
     public boolean waitForCommentToAppear(String commentText) {
         try {
-            waitForAnyVisible(textContains(commentText));
+            waitForAnyVisible(commentText(commentText));
             return true;
         } catch (RuntimeException exception) {
             return false;
         }
     }
 
+    /** FlatBackScreenHeader's back button carries no label or identifier of its own (shared
+     * component), so take the button on the title's row, left of it. Falls back to the
+     * generic back/dismiss (the sheet swipes down). */
+    @Override
     public boolean navigateBack() {
-        return tapFirstVisible(backAction);
+        hideKeyboardIfShown();
+        WebElement title = firstDisplayed(titleLabel);
+        if (title != null) {
+            Rectangle t = title.getRect();
+            int rowCenter = t.getY() + t.getHeight() / 2;
+            WebElement best = null;
+            for (WebElement b : driver.findElements(By.className("XCUIElementTypeButton"))) {
+                try {
+                    Rectangle r = b.getRect();
+                    if (b.isDisplayed() && r.getX() < t.getX()
+                            && Math.abs(r.getY() + r.getHeight() / 2 - rowCenter) < 25
+                            && (best == null || r.getX() < best.getRect().getX())) {
+                        best = b;
+                    }
+                } catch (RuntimeException ignored) {
+                    // re-rendered mid-scan
+                }
+            }
+            if (best != null) {
+                best.click();
+                return waitUntilGone(titleLabel);
+            }
+        }
+        BasePage.navigateBack(driver);
+        return waitUntilGone(titleLabel);
     }
 
     public boolean isReplyActionVisible() {
@@ -85,46 +104,55 @@ public class CommentsPage extends BasePage {
         return tapFirstVisible(replyAction);
     }
 
-    /** Reply prefill is a real state assertion, not "tap didn't crash" - CommentsScreen.kt's
-     * onReplyClick sets the input's TextFieldValue to "@name " directly, so the field must
-     * show that exact prefix afterward. */
+    private By inputWhere(String condition) {
+        return AppiumBy.iOSNsPredicateString("name == 'comments.input' AND " + condition);
+    }
+
+    /** Reply sets the composer text to "@name " directly (CommentsView onReply), so the field
+     * must show that exact prefix afterward. */
     public boolean isCommentInputPrefilledWithMention(String expectedName) {
-        return isAnyVisible(io.appium.java_client.AppiumBy.androidUIAutomator(
-                "new UiSelector().className(\"android.widget.EditText\").textStartsWith(\"@" + expectedName + " \")"
-        ));
+        return isAnyVisible(inputWhere("value BEGINSWITH " + predicateLiteral("@" + expectedName + " ")));
     }
 
     /** Same check without requiring the exact display name up front - reply targets
      * whichever comment happens to render first, so the name isn't known ahead of time. */
     public boolean isAnyMentionPrefillVisible() {
-        return isAnyVisible(io.appium.java_client.AppiumBy.androidUIAutomator(
-                "new UiSelector().className(\"android.widget.EditText\").textStartsWith(\"@\")"
-        ));
+        return isAnyVisible(inputWhere("value BEGINSWITH '@'"));
     }
 
+    // iOS: CommentsView has no quick-pick emoji bar, only an emoji-picker sheet behind the
+    // composer's Emoji button (see parity report).
     public boolean isEmojiBarItemVisible() {
-        return isAnyVisible(firstEmojiBarItem);
+        return false;
     }
 
+    // iOS: no emoji bar to tap (see isEmojiBarItemVisible).
     public boolean tapFirstEmojiBarItem() {
-        return tapFirstVisible(firstEmojiBarItem);
+        return false;
     }
 
-    /** EmojiBar's onEmojiClick appends the glyph to whatever text is already in the
-     * input (CommentsCommon.kt) - checking the field now contains it is the real signal,
-     * not just "the emoji chip was tappable". */
     public boolean doesCommentInputContainEmoji(String emoji) {
-        return isAnyVisible(io.appium.java_client.AppiumBy.androidUIAutomator(
-                "new UiSelector().className(\"android.widget.EditText\").textContains(\"" + emoji + "\")"
-        ));
+        return isAnyVisible(inputWhere("value CONTAINS " + predicateLiteral(emoji)));
     }
 
     // ---- Journey helpers (TC190+): row-relative locators for one specific comment ----
 
-    private final By moreAction = accessibilityId("More");
-    private final By deleteMenuItem = text("Delete");
-    private final By showMoreAction = text("Show more");
-    private final By showLessAction = text("Show less");
+    private final By moreAction = id("comments.more");
+    private final By deleteMenuItem = id("comments.delete");
+    private final By deleteMenuText = text("Delete");
+    private final By showMoreAction = expandToggle("Show more");
+    private final By showLessAction = expandToggle("Show less");
+
+    private static By expandToggle(String label) {
+        return AppiumBy.iOSNsPredicateString(
+                "name == 'comments.expand' AND label == " + predicateLiteral(label));
+    }
+
+    /** Comment body text, not the composer (which may still hold the same words). */
+    private static By commentText(String value) {
+        return AppiumBy.iOSNsPredicateString(
+                "name == 'comments.text' AND label CONTAINS " + predicateLiteral(value));
+    }
 
     private WebElement firstDisplayed(By locator) {
         for (WebElement e : driver.findElements(locator)) {
@@ -133,7 +161,7 @@ public class CommentsPage extends BasePage {
                     return e;
                 }
             } catch (RuntimeException ignored) {
-                // stale during recomposition
+                // stale during re-render
             }
         }
         return null;
@@ -150,31 +178,31 @@ public class CommentsPage extends BasePage {
     }
 
     public boolean isCommentVisible(String commentText) {
-        return firstDisplayed(textContains(commentText)) != null;
+        return firstDisplayed(commentText(commentText)) != null;
     }
 
     /** Left edge x of the comment text element, or -1 if absent. */
     public int commentTextLeft(String commentText) {
-        WebElement e = firstDisplayed(textContains(commentText));
+        WebElement e = firstDisplayed(commentText(commentText));
         return e == null ? -1 : e.getRect().getX();
     }
 
     public int commentTextTop(String commentText) {
-        WebElement e = firstDisplayed(textContains(commentText));
+        WebElement e = firstDisplayed(commentText(commentText));
         return e == null ? -1 : e.getRect().getY();
     }
 
     public boolean waitForCommentToDisappear(String commentText) {
-        return waitUntilGone(textContains(commentText));
+        return waitUntilGone(commentText(commentText));
     }
 
-    /** Taps the Reply label directly below the given comment's text. */
+    /** Taps the Reply button directly below the given comment's text. */
     public boolean tapReplyUnder(String commentText) {
-        WebElement c = firstDisplayed(textContains(commentText));
+        WebElement c = firstDisplayed(commentText(commentText));
         if (c == null) {
             return false;
         }
-        int bottom = c.getRect().getY() + 1; // Reply's touch target overlaps the text bottom
+        int bottom = c.getRect().getY() + 1;
         WebElement best = null;
         for (WebElement r : driver.findElements(replyAction)) {
             if (r.getRect().getY() >= bottom
@@ -190,10 +218,10 @@ public class CommentsPage extends BasePage {
     }
 
     /** Opens the owner "More" menu belonging to the comment row of the given text (the
-     * nearest More icon at or above the comment text) and taps Delete. */
+     * nearest More icon at or above the comment text, on the name row) and taps Delete. */
     public boolean deleteComment(String commentText) {
         hideKeyboardIfShown();
-        WebElement c = firstDisplayed(textContains(commentText));
+        WebElement c = firstDisplayed(commentText(commentText));
         if (c == null) {
             return false;
         }
@@ -210,11 +238,11 @@ public class CommentsPage extends BasePage {
         }
         best.click();
         try {
-            waitForAnyVisible(deleteMenuItem);
+            waitForAnyVisible(deleteMenuItem, deleteMenuText);
         } catch (RuntimeException e) {
             return false;
         }
-        return tapFirstVisible(deleteMenuItem);
+        return tapFirstVisible(deleteMenuItem, deleteMenuText);
     }
 
     public boolean isShowMoreVisible() {

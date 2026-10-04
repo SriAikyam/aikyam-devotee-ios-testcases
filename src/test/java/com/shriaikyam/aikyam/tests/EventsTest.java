@@ -8,16 +8,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 /**
- * Events (bottom nav → Events). Discovered and manually verified during exploratory QA;
- * the existing suite had zero coverage of this module before this pass.
- *
- * TC159/TC160 encode a confirmed, currently-reproducing defect (see the project's PROD
- * compatibility audit): on Android 10, tapping any category filter chip other than
- * "Near Me" does nothing - selection never moves and the event list never changes.
- * Confirmed correct on Android 11 with the identical steps, same account/session, ruling
- * out a data or account cause. These two tests are expected to FAIL on Android 10 and
- * PASS on Android 11 until the underlying bug is fixed - that is the point of having
- * them, not a flaw in the test.
+ * Events (bottom nav → Events).
  */
 public class EventsTest extends BaseTest {
 

@@ -105,9 +105,10 @@ public class DeepLinkPage extends BasePage {
         }
     }
 
-    /** True when the Home feed (stories strip with the "All Posts" filter) is what is showing. */
+    /** True when the Home feed (subscriber strip with the All Posts filter, and the top bar's
+     * create-post button) is what is showing. */
     public boolean isHomeFeedShown(Duration timeout) {
-        return waitFor(text("All Posts"), timeout) && waitFor(accessibilityId("Create Post"), timeout);
+        return waitFor(id("feed.filter.allPosts"), timeout) && waitFor(id("feed.createPost"), timeout);
     }
 
     /** Backs out of anything left open and ends on the Home tab. */

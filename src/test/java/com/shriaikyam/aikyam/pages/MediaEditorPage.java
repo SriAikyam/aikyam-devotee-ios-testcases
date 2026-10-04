@@ -1,47 +1,60 @@
 package com.shriaikyam.aikyam.pages;
 
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Dimension;
+import org.openqa.selenium.Point;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.PointerInput;
+import org.openqa.selenium.interactions.Sequence;
 
-/** Reached from PostPage by tapping an attached image/video thumbnail
- * (MediaGridThumbnailCell's onOpenEditor). Confirmed via MediaEditorScreen.kt source:
- * every string/contentDescription here is a hardcoded literal, not a string resource. */
+import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+
+/** CreatePostMediaEditorView (full-screen cover), reached from PostPage via a thumbnail's
+ * pencil button. Its text dialog is CreatePostTextEditorDialog and its crop tool is the
+ * CreatePostCropSheet sheet. Every `id(...)` is paired with a label/type fallback. */
 public class MediaEditorPage extends BasePage {
 
-    private final By stickerTool = text("Sticker");
-    // Every sticker item in the tray AND the placed sticker on canvas share the exact
-    // same contentDescription "Sticker" - individual stickers aren't distinguishable,
-    // only counted by how many match at once.
-    private final By stickerNode = accessibilityId("Sticker");
-    private final By removeStickerAction = accessibilityId("Remove sticker");
+    // Tool buttons combine the SF Symbol and the caption Text into one label, so the
+    // fallbacks match on CONTAINS rather than an exact label.
+    private final By cropTool = id("mediaeditor.tool.crop");
+    private final By cropToolLabel = button("label CONTAINS 'Crop'");
+    private final By filterTool = id("mediaeditor.tool.filter");
+    private final By filterToolLabel = button("label CONTAINS 'Filter'");
+    private final By adjustTool = id("mediaeditor.tool.adjust");
+    private final By adjustToolLabel = button("label CONTAINS 'Adjust'");
+    private final By textTool = id("mediaeditor.tool.text");
+    private final By textToolLabel = button("label CONTAINS 'Text'");
+    private final By stickerTool = id("mediaeditor.tool.sticker");
+    private final By stickerToolLabel = button("label CONTAINS 'Sticker'");
 
-    private final By textTool = text("Text");
-    // "Type text..." is BasicTextField's placeholder child Text, rendered only while
-    // empty - it's a real visibility signal for the dialog being open, but tapping/
-    // typing into that exact node doesn't reach the actual editable field (confirmed
-    // live: text landed nowhere). The real input is the EditText node itself.
+    // Tray items and placed overlays carry no shared label on iOS (each is its raw glyph),
+    // so they are only countable through their identifiers.
+    private final By stickerTrayItem = id("mediaeditor.sticker");
+    private final By placedOverlay = id("mediaeditor.overlay");
+
     private final By textOverlayPlaceholder = textContains("Type text...");
-    private final By textOverlayField = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().className(\"android.widget.EditText\")"
-    );
-    private final By textEditorDone = text("Done");
+    private final By textOverlayField = id("mediaeditor.text.field");
+    // TextField(axis: .vertical) is backed by a UITextView.
+    private final By textOverlayFieldByType = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeTextView' OR type == 'XCUIElementTypeTextField'");
+    private final By textEditorDone = id("mediaeditor.text.done");
+    private final By textOverlayCancel = id("mediaeditor.text.close");
+    private final By textOverlayCancelLabel = button("label == 'Close'");
 
-    private final By backAction = accessibilityId("Back");
+    // iOS top bar: Skip (leave without applying) | "Edit" title | Done.
+    private final By skipAction = id("mediaeditor.skip");
+    private final By skipLabel = button("label == 'Skip'");
+    private final By editorTitle = id("mediaeditor.title");
+    // StaticText only: Create Post's thumbnail pencil is a Button also labelled "Edit".
+    private final By editorTitleText = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeStaticText' AND label == 'Edit'");
+    private final By doneAction = id("mediaeditor.done");
+    private final By doneLabel = button("label == 'Done'");
 
-    // Toolbar. The primary action reads "Next" while earlier items in a multi-item batch
-    // are still unedited and "Done" on the last one (MediaEditorScreen.kt), so both are
-    // accepted wherever the intent is "commit and leave".
-    private final By editorTitle = text("Edit");
-    private final By doneAction = text("Done");
-    private final By nextAction = text("Next");
-
-    // Each image tool is an icon whose contentDescription is its own label - the tool list
-    // in MediaEditorScreen.kt is exactly Crop, Filter, Adjust, Text, Sticker.
-    private final By cropTool = accessibilityId("Crop");
-    private final By filterTool = accessibilityId("Filter");
-    private final By adjustTool = accessibilityId("Adjust");
-
-    // ImageFilter's labels, in enum order. "Original" is the NONE default.
     private final By originalFilter = text("Original");
     private final By warmFilter = text("Warm");
     private final By monoFilter = text("Mono");
@@ -49,85 +62,105 @@ public class MediaEditorPage extends BasePage {
     private final By brightnessSlider = text("Brightness");
     private final By contrastSlider = text("Contrast");
     private final By saturationSlider = text("Saturation");
-    private final By resetAdjustments = text("Reset");
+    private final By resetAdjustments = id("mediaeditor.adjust.reset");
+    private final By cropReset = id("mediaeditor.crop.reset");
+    private final By resetLabel = button("label == 'Reset'");
 
-    private final By textOverlayCancel = accessibilityId("Cancel");
-    private final By removeAudioAction = accessibilityId("Remove Audio");
+    private final By removeAudioAction = id("mediaeditor.video.removeaudio");
+    private final By removeAudioLabel = button("label CONTAINS 'Remove audio'");
 
     public MediaEditorPage(IOSDriver driver) {
         super(driver);
     }
 
+    private static By button(String condition) {
+        return AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeButton' AND (" + condition + ")");
+    }
+
+    /** Skip/Done are on both the image and the video editor; the tool bar is image-only. */
     public boolean isEditorVisible() {
-        return isAnyVisible(stickerTool, textTool, backAction);
+        return isAnyVisible(skipAction, skipLabel, doneAction, stickerTool, stickerToolLabel);
     }
 
     public boolean openStickerTray() {
-        return tapFirstVisible(stickerTool);
+        return tapFirstVisible(stickerTool, stickerToolLabel);
     }
 
+    /** Tray items plus stickers/text already placed on the canvas. */
     public int visibleStickerCount() {
-        return visibleElements(stickerNode).size();
+        return visibleElements(stickerTrayItem).size() + visibleElements(placedOverlay).size();
     }
 
-    /** Taps the first sticker in the tray - the tray itself is at the top of the
-     * z-order until one is placed, so this always hits a tray item, not the canvas. */
     public boolean tapFirstStickerInTray() {
-        return tapFirstVisible(stickerNode);
+        return tapFirstVisible(stickerTrayItem);
     }
 
+    /** iOS has no "Remove sticker" control: a long-press on a placed overlay removes it.
+     * Returns true once the canvas holds one overlay fewer. */
     public boolean tapRemoveSticker() {
-        return tapFirstVisible(removeStickerAction);
+        List<WebElement> placed = visibleElements(placedOverlay);
+        if (placed.isEmpty()) {
+            return false;
+        }
+        try {
+            longPress(placed.get(0));
+        } catch (RuntimeException exception) {
+            return false;
+        }
+        return visibleElements(placedOverlay).size() < placed.size();
     }
 
+    // iOS: the media editor has no "Remove sticker" button; removal is a long-press (see tapRemoveSticker).
     public boolean isRemoveStickerActionVisible() {
-        return isAnyVisible(removeStickerAction);
+        return false;
     }
 
     public boolean openTextTool() {
-        return tapFirstVisible(textTool);
+        return tapFirstVisible(textTool, textToolLabel);
     }
 
     public boolean isTextOverlayInputVisible() {
-        return isAnyVisible(textOverlayPlaceholder, textOverlayField);
+        return isAnyVisible(textOverlayField, textOverlayPlaceholder);
     }
 
     public boolean typeOverlayText(String value) {
-        return typeIntoFirstVisible(value, textOverlayField, textOverlayPlaceholder);
+        return typeIntoFirstVisible(value, textOverlayField, textOverlayFieldByType);
     }
 
     public boolean confirmTextOverlay() {
-        return tapFirstVisible(textEditorDone);
+        return tapFirstVisible(textEditorDone, doneLabel);
     }
 
     public boolean isOverlayTextVisible(String value) {
         return isAnyVisible(textContains(value));
     }
 
+    /** Skip is this screen's way out: it closes without applying pending edits. */
+    @Override
     public boolean navigateBack() {
-        return tapFirstVisible(backAction);
+        return tapFirstVisible(skipAction, skipLabel);
     }
 
     // ── Crop ─────────────────────────────────────────────────────────────────────────
+    /** Opens CreatePostCropSheet (Cancel / "Crop" / Done, aspect chips, Reset). */
     public boolean openCropTool() {
-        return tapFirstVisible(cropTool);
+        return tapFirstVisible(cropTool, cropToolLabel);
     }
 
-    /** The crop and adjust panels own the "Reset" control, so its appearance is what
-     * distinguishes a genuinely open panel from "the tool icon was tappable". */
     public boolean isCropPanelOpen() {
-        return isAnyVisible(resetAdjustments);
+        return isAnyVisible(cropReset, resetLabel);
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────────────
     public boolean openFilterTray() {
-        return tapFirstVisible(filterTool);
+        return tapFirstVisible(filterTool, filterToolLabel);
     }
 
     public boolean isFilterTrayOpen() {
         return isAnyVisible(originalFilter, warmFilter, monoFilter);
     }
 
+    /** CreatePostImageFilter labels: Original, Warm, Cool, Mono, Vivid. */
     public boolean selectFilter(String label) {
         return tapFirstVisible(text(label));
     }
@@ -138,48 +171,57 @@ public class MediaEditorPage extends BasePage {
 
     // ── Adjust ───────────────────────────────────────────────────────────────────────
     public boolean openAdjustPanel() {
-        return tapFirstVisible(adjustTool);
+        return tapFirstVisible(adjustTool, adjustToolLabel);
     }
 
-    /** All three sliders, not any-of: the panel is only really open once the whole
-     * Brightness/Contrast/Saturation set has composed. */
+    /** All three sliders, not any-of: the panel is only really open once the whole set shows. */
     public boolean isAdjustPanelOpen() {
         return isAnyVisible(brightnessSlider) && isAnyVisible(contrastSlider)
                 && isAnyVisible(saturationSlider);
     }
 
     public boolean tapResetAdjustments() {
-        return tapFirstVisible(resetAdjustments);
+        return tapFirstVisible(resetAdjustments, resetLabel);
     }
 
     // ── Text overlay ─────────────────────────────────────────────────────────────────
     public boolean cancelTextOverlay() {
-        return tapFirstVisible(textOverlayCancel);
+        return tapFirstVisible(textOverlayCancel, textOverlayCancelLabel);
     }
 
     // ── Video ────────────────────────────────────────────────────────────────────────
-    /** Only rendered for a video item, so absence means "this item is not a video"
-     * rather than a failure. */
+    /** Only on the video editor's Edit tab, so absence means "this item is not a video". */
     public boolean isRemoveAudioVisible() {
-        return isAnyVisible(removeAudioAction);
+        return isAnyVisible(removeAudioAction, removeAudioLabel);
     }
 
     // ── Commit ───────────────────────────────────────────────────────────────────────
-    /** The primary action reads "Next" while earlier items in a batch are unedited and
-     * "Done" on the last, so both are accepted for "commit and leave". */
+    /** iOS always reads "Done" (no per-item "Next" in a batch). */
     public boolean commitAndLeave() {
-        return tapFirstVisible(doneAction, nextAction);
+        return tapFirstVisible(doneAction, doneLabel);
     }
 
     public boolean isStillInEditor() {
-        return isAnyVisible(editorTitle);
+        return isAnyVisible(editorTitle, editorTitleText);
     }
 
-    /** Polls for the editor to close rather than checking once. commitAndLeave() returns
-     * as soon as the tap is dispatched, not once the edit has been applied and the screen
-     * has popped - confirmed live: TC137 reported it was still in the editor while the
-     * captured page source showed Create Post, with no "Edit" node anywhere. */
+    /** Polls: Done returns before the edit is applied and the cover is dismissed (a video
+     * export can take a few seconds). */
     public boolean hasLeftEditor() {
-        return waitUntilGone(editorTitle);
+        return waitUntilGone(editorTitle, editorTitleText);
+    }
+
+    private void longPress(WebElement element) {
+        Point location = element.getLocation();
+        Dimension size = element.getSize();
+        int x = location.getX() + size.getWidth() / 2;
+        int y = location.getY() + size.getHeight() / 2;
+        PointerInput finger = new PointerInput(PointerInput.Kind.TOUCH, "finger");
+        Sequence press = new Sequence(finger, 1);
+        press.addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), x, y));
+        press.addAction(finger.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+        press.addAction(finger.createPointerMove(Duration.ofMillis(900), PointerInput.Origin.viewport(), x, y));
+        press.addAction(finger.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+        driver.perform(Collections.singletonList(press));
     }
 }

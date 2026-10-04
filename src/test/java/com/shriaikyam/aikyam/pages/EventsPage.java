@@ -5,71 +5,75 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
- * Events home (bottom nav → Events) and its per-card actions. Discovered and manually
- * verified during exploratory QA - the existing suite had no coverage of this module at
- * all before this pass. EventDetailsScreen (opened via a card's "Details" action) is
- * covered by {@link #openFirstEventDetails()} and the isXxxVisible() checks below rather
- * than a separate page object, since its content is a straightforward superset of what a
- * card already shows.
+ * Events home (bottom nav → Events, EventsHomeView) and its per-card actions (EventCard).
+ * EventDetailsView (opened via a card's "Details" action) is covered by
+ * {@link #openFirstEventDetails()} and the isXxxVisible() checks below rather than a
+ * separate page object, since its content is a straightforward superset of what a card
+ * already shows.
  */
 public class EventsPage extends BasePage {
 
-    // Filter chip labels, top of the Events screen. "Near Me" is the default-selected
-    // chip; the others are what TC-below found unresponsive on Android 10 only.
-    private final By attendingFilterChip = text("Attending");
-    private final By savedFilterChip = text("Saved");
-    private final By nearMeFilterChip = text("Near Me");
-    private final By pujasFilterChip = text("Pujas");
-    private final By bhajanFilterChip = text("Bhajan");
-    private final By festivalsFilterChip = text("Festivals");
+    // EventsFilterChipRow: one identifier per chip, "events.filter.<EventsFilterChip rawValue>".
+    private final By attendingFilterChip = id("events.filter.attending");
+    private final By savedFilterChip = id("events.filter.saved");
+    private final By nearMeFilterChip = id("events.filter.near_me");
+    private final By eventsTitle = id("events.title");
 
-    private final By detailsAction = text("Details");
-    private final By attendingAction = text("Attending");
-    private final By saveAction = accessibilityId("Save");
-    private final By shareAction = accessibilityId("Share");
+    private final By detailsAction = id("events.card.details");
+    private final By emptyState = id("events.empty");
+    private final By attendingAction = id("events.card.attend");
+    private final By detailsAttendAction = id("events.details.attend");
+    // SaveShareIconRow is shared by the card footer and the details bottom bar.
+    private final By saveAction = id("events.save");
+    private final By shareAction = id("events.share");
 
-    // EventDetailsScreen content - opened via detailsAction above.
-    private final By backAction = accessibilityId("Back");
+    // EventDetailsView content - opened via detailsAction above.
+    private final By backAction = id("events.details.back");
+    private final By detailsTitle = id("events.details.title");
     private final By attendeeCountText = textContains("attendees");
-    private final By scheduleHeading = text("Schedule");
+    private final By scheduleHeading = id("events.details.schedule");
 
     public EventsPage(IOSDriver driver) {
         super(driver);
     }
 
     public boolean isEventsScreenVisible() {
-        return isAnyVisible(nearMeFilterChip, attendingFilterChip, savedFilterChip);
+        return isAnyVisible(nearMeFilterChip, attendingFilterChip, savedFilterChip, eventsTitle);
     }
 
     public boolean isAnyEventCardVisible() {
-        return isAnyVisible(detailsAction) || driver.getPageSource().contains("No events found");
+        return isAnyVisible(detailsAction, emptyState);
     }
 
     /**
-     * Taps a filter chip by its visible label and reports whether the chip's own
-     * selected/checked state actually changed - not just whether the tap landed.
-     * "selected" is read off the chip's nearest ancestor carrying that attribute,
-     * since the bare Text node itself does not expose selection state.
+     * Taps a filter chip by its visible English label ("Near Me", "Pujas", ...) and reports
+     * whether the chip's own selected state actually changed - not just whether the tap
+     * landed.
      */
     public boolean tapFilterChipAndConfirmSelected(String label) {
-        By chip = text(label);
-        if (!tapFirstVisible(chip)) {
+        if (!tapFirstVisible(filterChip(label), text(label))) {
             return false;
         }
         return isFilterChipSelected(label);
     }
 
-    /** True only if this label's chip container reports selected=true - not merely
-     * that the label text is present, which stays true regardless of selection. */
+    /** True only if this label's chip reports selected=true. XCUITest derives "selected"
+     * from the .isSelected accessibility trait, which EventsFilterChipView does not set
+     * yet (selection is only drawn as a ring + bold label) - until it does, this reads
+     * false for every chip. */
     public boolean isFilterChipSelected(String label) {
-        By chipContainer = By.xpath("(//*[@text='" + label + "']/ancestor::*[@selected])[1]");
-        List<WebElement> matches = driver.findElements(chipContainer);
+        List<WebElement> matches = driver.findElements(filterChip(label));
         if (matches.isEmpty()) {
             return false;
         }
         return "true".equals(matches.get(0).getAttribute("selected"));
+    }
+
+    private By filterChip(String label) {
+        return id("events.filter." + label.trim().toLowerCase(Locale.ROOT).replace(' ', '_'));
     }
 
     public boolean openFirstEventDetails() {
@@ -77,11 +81,11 @@ public class EventsPage extends BasePage {
     }
 
     public boolean isEventDetailsVisible() {
-        return isAnyVisible(attendeeCountText, scheduleHeading);
+        return isAnyVisible(detailsTitle, attendeeCountText, scheduleHeading);
     }
 
     public boolean isAttendingActionVisible() {
-        return isAnyVisible(attendingAction);
+        return isAnyVisible(attendingAction, detailsAttendAction);
     }
 
     public boolean isSaveActionVisible() {
@@ -93,6 +97,6 @@ public class EventsPage extends BasePage {
     }
 
     public boolean tapBack() {
-        return tapFirstVisible(backAction);
+        return tapFirstVisible(backAction) || navigateBack();
     }
 }

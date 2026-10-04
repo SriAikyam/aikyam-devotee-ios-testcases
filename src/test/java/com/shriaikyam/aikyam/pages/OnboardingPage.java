@@ -8,30 +8,25 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import java.time.Duration;
 import java.util.List;
 
+/** OnboardingProfileScreen ("Complete your profile"): Full Name, Username, a Date of
+ * Birth button that opens a graphical DatePicker sheet, Male/Female/Other, an optional
+ * location section, and Continue. */
 public class OnboardingPage extends BasePage {
 
-    private final By backAction = accessibilityId("Back");
-    private final By screenAnchor = text("Tell us about yourself");
-    private final By usernameFieldLabel = textContains("Username");
-    private final By dobFieldAnchor = text("Date of Birth *");
-    private final By dobPlaceholder = text("DD/MM/YYYY");
-    private final By maleOption = text("Male");
-    private final By femaleOption = text("Female");
-    private final By otherOption = text("Other");
-    private final By continueAction = text("Continue");
-    private final By loadingOverlay = text("Loading...");
-    // Full Name and Username are the only genuinely typable fields on this screen (DOB
-    // is read-only and opens a picker dialog instead); order on screen is Full Name
-    // then Username, same index-based pattern used elsewhere in this framework.
-    private final By editTextField = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().className(\"android.widget.EditText\")"
-    );
-    // The DOB wheel-picker dialog defaults to 15 June 2000 (well over the 13-year-old
-    // minimum) - accepting that default via "OK" is a reliable happy path. Actually
-    // scrolling the wheel to a specific date is fragile via Appium swipes and is not
-    // attempted here.
-    private final By dobDialogOkAction = text("OK");
-    private final By dobDialogCancelAction = text("Cancel");
+    private final By backAction = id("onboarding.back");
+    private final By screenAnchor = id("onboarding.title");
+    private final By fullNameField = id("onboarding.fullName");
+    private final By usernameField = id("onboarding.username");
+    private final By dobField = id("onboarding.dob");
+    private final By maleOption = id("onboarding.gender.male");
+    private final By femaleOption = id("onboarding.gender.female");
+    private final By otherOption = id("onboarding.gender.other");
+    private final By continueAction = id("onboarding.continue");
+    private final By loadingOverlay = id("onboarding.loading");
+    // The sheet's DatePicker starts on viewModel.selectedDate; Done commits it as-is.
+    // Driving the graphical calendar to a specific date is not attempted here.
+    private final By dobDialogOkAction = id("onboarding.dob.done");
+    private final By dobDialogCancelAction = id("onboarding.dob.cancel");
 
     public OnboardingPage(IOSDriver driver) {
         super(driver);
@@ -50,31 +45,35 @@ public class OnboardingPage extends BasePage {
     }
 
     public boolean enterFullName(String name) {
-        return typeIntoFieldAtIndex(0, name);
+        return typeInto(fullNameField, name);
     }
 
+    /** An empty SwiftUI TextField reports its placeholder as `value`, so a value equal to
+     * the placeholder means the field is empty. */
     public boolean isUsernamePrefilled() {
-        List<WebElement> fields = visibleElements(editTextField);
-        if (fields.size() < 2) {
+        List<WebElement> fields = visibleElements(usernameField);
+        if (fields.isEmpty()) {
             return false;
         }
-        String value = fields.get(1).getText();
-        return value != null && !value.isBlank();
+        WebElement field = fields.get(0);
+        String value = field.getAttribute("value");
+        String placeholder = field.getAttribute("placeholderValue");
+        return value != null && !value.isBlank() && !value.equals(placeholder);
     }
 
     public boolean enterUsername(String username) {
-        return typeIntoFieldAtIndex(1, username);
+        return typeInto(usernameField, username);
     }
 
     public boolean isUsernameFieldVisible() {
-        return isAnyVisible(usernameFieldLabel);
+        return isAnyVisible(usernameField);
     }
 
     public boolean openDobPicker() {
-        return tapFirstVisible(dobFieldAnchor, dobPlaceholder);
+        return tapFirstVisible(dobField);
     }
 
-    /** Opens the DOB picker and accepts its default date (15 June 2000) via OK. */
+    /** Opens the DOB sheet and commits the date it opens on via Done. */
     public boolean acceptDefaultDob() {
         if (!openDobPicker()) {
             return false;
@@ -108,7 +107,8 @@ public class OnboardingPage extends BasePage {
         } else {
             option = otherOption;
         }
-        return tapFirstVisible(option);
+        hideKeyboardIfShown();
+        return scrollUntilVisible(option) && tapFirstVisible(option);
     }
 
     public boolean isContinueEnabled() {
@@ -121,7 +121,8 @@ public class OnboardingPage extends BasePage {
     }
 
     public boolean tapContinue() {
-        return tapFirstVisible(continueAction);
+        hideKeyboardIfShown();
+        return scrollUntilVisible(continueAction) && tapFirstVisible(continueAction);
     }
 
     /** Fills every required field with valid data and taps Continue - the shortest
@@ -133,6 +134,7 @@ public class OnboardingPage extends BasePage {
         if (!enterUsername(username)) {
             return false;
         }
+        hideKeyboardIfShown();
         if (!acceptDefaultDob()) {
             return false;
         }
@@ -145,7 +147,7 @@ public class OnboardingPage extends BasePage {
     public boolean waitForDashboard(FeedPage feedPage) {
         try {
             new WebDriverWait(driver, Duration.ofSeconds(45)).until(ignored -> {
-                if (isAnyVisible(loadingOverlay)) {
+                if (isVisibleNow(loadingOverlay)) {
                     return false;
                 }
                 return feedPage.isAnyFeedItemVisible() || feedPage.hasNonBlankPageSource();
@@ -156,24 +158,7 @@ public class OnboardingPage extends BasePage {
         }
     }
 
-    private boolean typeIntoFieldAtIndex(int index, String value) {
-        try {
-            List<WebElement> fields = visibleElements(editTextField);
-            if (fields.size() <= index) {
-                return false;
-            }
-
-            WebElement field = fields.get(index);
-            field.click();
-            waitUntilFocused(field);
-            try {
-                field.clear();
-            } catch (RuntimeException ignored) {
-            }
-            field.sendKeys(value);
-            return true;
-        } catch (RuntimeException exception) {
-            return false;
-        }
+    private boolean typeInto(By field, String value) {
+        return typeIntoFieldAtIndex(field, 0, value);
     }
 }

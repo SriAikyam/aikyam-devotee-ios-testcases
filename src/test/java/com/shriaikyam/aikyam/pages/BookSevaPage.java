@@ -1,5 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
@@ -7,62 +8,69 @@ import org.openqa.selenium.WebElement;
 import java.util.List;
 
 /**
- * Covers the Seva booking wizard: Seva List -> Catalog Details -> Booking Details ->
- * Payment Review. Deliberately stops there - there is no sandbox/test payment mode
- * anywhere in this app (PaymentScreen.kt hardcodes .setIsProduction(true) for every
- * build flavor), so this page object has NO method that taps "Proceed to Payment" -
- * that button is only ever checked for visibility/enabled state, never invoked, to
- * make it structurally impossible for a test to trigger a real charge.
+ * Covers the Seva booking wizard: Seva List (SevasView) -> Catalog Details
+ * (SevaCatalogDetailsView) -> Booking Details (SevaBookingView) -> Payment Review
+ * (BookSevaView's HundiReviewPayView). Deliberately stops there: this page object has NO
+ * method that taps "Proceed to Payment" - that button is only ever checked for
+ * visibility/enabled state, never invoked, to make it structurally impossible for a test
+ * to trigger a real charge.
+ *
+ * iOS state today (see BookSevaTest's @Ignore): there is no Sevas tab, SevasView's
+ * Book/Hundi/Reorder quick actions and the catalog's "Book this seva" bar are hidden behind
+ * file-level flags, and "Place Seva Order (Coming soon)" only shows an alert. The locators
+ * below still target the real views so the flow works once those gates lift.
  */
 public class BookSevaPage extends BasePage {
 
-    // Bottom-nav labels are plain Text with no contentDescription, same as FeedPage.
-    private final By sevasTabAction = text("Sevas");
-    private final By sevaCardBookAction = text("Book");
-    private final By sevaCardDetailsAction = text("Details");
-    private final By bookThisSevaAction = text("Book this seva");
+    // iOS has no Sevas tab (Book Seva is on hold); same id HomePage keeps for it.
+    private final By sevasTabAction = id("tab.sevas");
+    private final By sevaCardBookAction = id("sevas.card.book");
+    private final By sevaCardDetailsAction = id("sevas.card.details");
+    private final By bookThisSevaAction = id("sevas.catalog.book");
 
+    // SevaBookingView section titles (BookSevaSectionTitle: icon + plain Text).
     private final By templeSectionLabel = text("Temple");
     private final By selectedSevaLabel = text("Selected Seva");
     private final By dateOfSevaLabel = text("Date of Seva");
-    private final By selectDateIconAction = accessibilityId("Select date of seva");
-    private final By timeSlotLabel = text("Time slot");
+    private final By selectDateAction = id("sevas.booking.datefield");
+    private final By datePickerOk = id("sevas.datepicker.ok");
     private final By devoteeDetailsLabel = text("Devotee Details");
     private final By selectFamilyMembersLabel = text("Select Family Members");
-    private final By addFamilyMemberRow = accessibilityId("Add family member or other devotee");
-    private final By totalDevoteesLabel = textContains("Total number of devotees");
-    private final By devoteeValidationError = text("Please select at least one devotee");
-    private final By dateValidationError = text("Please select date of seva");
-    private final By placeSevaOrderAction = text("Place Seva Order");
-    private final By finalTotalLabel = text("Final Total");
+    private final By addFamilyMemberRow = id("sevas.booking.addmember");
+    private final By totalDevoteesLabel = id("sevas.booking.totaldevotees");
+    private final By devoteeCheckbox = id("sevas.booking.devotee.checkbox");
+    private final By devoteeName = id("sevas.booking.devotee.name");
+    private final By devoteeValidationError = id("sevas.booking.devoteeerror");
+    private final By dateValidationError = id("sevas.booking.dateerror");
+    private final By placeSevaOrderAction = id("sevas.booking.placeorder");
+    private final By finalTotalLabel = id("sevas.booking.finaltotal");
 
     // "Proceed to Payment" is checked for presence/enabled state only - see class
     // comment. Never tap this from a test.
-    private final By proceedToPaymentAction = text("Proceed to Payment");
-    private final By amountBreakdownLabel = text("Amount Breakdown");
+    private final By proceedToPaymentAction = id("hundi.review.proceed");
+    private final By amountBreakdownLabel = id("hundi.review.breakdown");
+    private final By paymentReviewBack = id("hundi.review.back");
 
-    // Hundi Donation screen (HundiDonationScreen) - reached from a temple row's
-    // "Hundi" button on this same Sevas list, conditional on temple.showHundiButton
-    // (not guaranteed present for every temple). Fields are stacked OutlinedTextFields
-    // with no distinguishing contentDescription - accessed by index via
-    // typeIntoFieldAtIndex(): 0=amount, 1=name of person, 2=occasion, 3=PAN number,
-    // 4=name on PAN card.
-    private final By hundiEntryAction = text("Hundi");
-    private final By hundiAmountLabel = text("Donation to Hundi");
-    private final By hundiDonateAction = text("Donate");
+    // Hundi Donation screen (BookSevaView) - reached from a temple row's "Hundi" button on
+    // the Sevas list. Fields in order: 0=amount (HundiDonationAmountField), then the
+    // HundiLabeledField TextFields 1=name of person, 2=occasion, 3=PAN number, 4=name on
+    // PAN card.
+    private final By hundiEntryAction = id("sevas.hundi");
+    private final By hundiScreenTitle = id("hundi.title");
+    private final By hundiAmountField = id("hundi.amount");
+    private final By hundiBack = id("hundi.back");
+    private final By hundiDonateAction = id("hundi.donate");
     private final By hundiInvalidAmountError = textContains("Please enter a valid amount");
     private final By hundiAmountRequiredError = textContains("Please enter donation amount");
-    private final By hundiEditTextField = io.appium.java_client.AppiumBy.androidUIAutomator(
-            "new UiSelector().className(\"android.widget.EditText\")"
-    );
+    private final By hundiTextField = AppiumBy.className("XCUIElementTypeTextField");
 
-    // Frequent/reorder flow - only rendered when the account has past frequent sevas
-    // (temples.frequentSevas.isNotEmpty()); callers must treat absence as a skip, not a
-    // failure, same as LivePlayerPage's content-dependent checks.
-    private final By frequentSevasSectionHeader = text("Your frequent sevas");
-    private final By frequentDetailsAction = text("Details");
-    private final By frequentReorderAction = text("Reorder");
-    private final By bookingDetailsTitle = text("Booking details");
+    // Frequent/reorder flow - only rendered when the account has past frequent sevas;
+    // callers must treat absence as a skip, not a failure.
+    private final By frequentSevasSectionHeader = id("sevas.frequent.header");
+    private final By frequentDetailsAction = id("sevas.frequent.details");
+    private final By frequentReorderAction = id("sevas.frequent.reorder");
+    private final By frequentDetailsReorderAction = id("sevas.frequentdetails.reorder");
+    private final By bookingDetailsTitle = text("Booking Details");
 
     public BookSevaPage(IOSDriver driver) {
         super(driver);
@@ -101,25 +109,22 @@ public class BookSevaPage extends BasePage {
     }
 
     public boolean openDatePicker() {
-        return tapFirstVisible(selectDateIconAction, dateOfSevaLabel);
+        return tapFirstVisible(selectDateAction);
     }
 
-    /** Confirms whichever date the Material3 DatePicker defaults to (today) via its
-     * "OK" confirm action - avoids manipulating the calendar grid via Appium. */
+    /** Confirms whichever date SevaDatePickerSheet defaults to (the minimum bookable day)
+     * via its "OK" toolbar action - avoids manipulating the calendar grid via Appium. */
     public boolean confirmDefaultDate() {
         if (!openDatePicker()) {
             return false;
         }
-        try {
-            waitForAnyVisible(text("OK"));
-        } catch (RuntimeException exception) {
-            return false;
-        }
-        return tapFirstVisible(text("OK"));
+        return tapFirstVisible(datePickerOk, text("OK"));
     }
 
+    // iOS: SevaBookingView has no time slot field - the slot comes from the seva itself
+    // (see parity report).
     public boolean isTimeSlotFieldVisible() {
-        return isAnyVisible(timeSlotLabel);
+        return false;
     }
 
     public boolean isDevoteeDetailsVisible() {
@@ -130,13 +135,43 @@ public class BookSevaPage extends BasePage {
         return isAnyVisible(text(name));
     }
 
-    /** Toggles a family member's checkbox by finding the nearest Checkbox that appears
-     * before their name in document order (the row lays out Checkbox then name). */
+    /** Toggles a family member's checkbox: BookingDevoteeRowView lays out checkbox then
+     * name in one row, and every row shares the same ids, so pick the checkbox whose
+     * vertical center is closest to the name's. */
     public boolean toggleDevotee(String name) {
-        By checkboxForMember = By.xpath(
-                "(//*[@text='" + name + "']/preceding::android.widget.CheckBox)[last()]"
-        );
-        return tapFirstVisible(checkboxForMember);
+        WebElement nameElement = null;
+        for (WebElement candidate : visibleElements(devoteeName)) {
+            if (name.equals(candidate.getAttribute("label"))) {
+                nameElement = candidate;
+                break;
+            }
+        }
+        if (nameElement == null) {
+            return false;
+        }
+        int nameY = centerY(nameElement);
+        WebElement best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (WebElement checkbox : visibleElements(devoteeCheckbox)) {
+            int distance = Math.abs(centerY(checkbox) - nameY);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = checkbox;
+            }
+        }
+        if (best == null) {
+            return false;
+        }
+        try {
+            best.click();
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static int centerY(WebElement element) {
+        return element.getLocation().getY() + element.getSize().getHeight() / 2;
     }
 
     public boolean tapAddFamilyMemberRow() {
@@ -146,7 +181,10 @@ public class BookSevaPage extends BasePage {
     /** Reads "Total number of devotees: N" and returns N, or -1 if unreadable. */
     public int readTotalDevoteesCount() {
         for (WebElement element : visibleElements(totalDevoteesLabel)) {
-            String value = element.getText();
+            String value = element.getAttribute("label");
+            if (value == null) {
+                value = element.getText();
+            }
             if (value == null) {
                 continue;
             }
@@ -158,17 +196,21 @@ public class BookSevaPage extends BasePage {
         return -1;
     }
 
+    /** Only set by SevaBookingView.placeSevaOrder(), which the "Coming soon" gate on the
+     * Place Seva Order button currently makes unreachable on iOS. */
     public boolean isDevoteeValidationErrorVisible() {
         return isAnyVisible(devoteeValidationError);
     }
 
+    /** See isDevoteeValidationErrorVisible(). The date field also shows this slot for the
+     * "connect to confirm today" clock-sync error. */
     public boolean isDateValidationErrorVisible() {
         return isAnyVisible(dateValidationError);
     }
 
-    /** Taps a Kanike/Hundi amount chip - callers must pick amounts unique to the
-     * section being tested (Kanike: 20/30/40/50, Hundi: 25/50/75/100 - the value 50
-     * exists in both, so avoid it to prevent tapping the wrong section's chip). */
+    /** Taps a Kanike/Hundi amount chip (BookSevaAmountChipsRow) - callers must pick amounts
+     * unique to the section being tested, since a value present in both rows would tap
+     * whichever chip comes first. */
     public boolean tapAmountChip(int amount) {
         return tapFirstVisible(text("₹" + amount));
     }
@@ -204,37 +246,30 @@ public class BookSevaPage extends BasePage {
         }
     }
 
-    /** Backs out of Payment Review without ever tapping Proceed to Payment - the
-     * screen's BackHandler/toolbar back both route through onPaymentCancelled back to
-     * the Sevas list. */
+    /** Backs out of Payment Review without ever tapping Proceed to Payment. */
     public boolean cancelPaymentReview() {
-        try {
-            driver.navigate().back();
-            return true;
-        } catch (RuntimeException exception) {
-            return false;
-        }
+        return tapFirstVisible(paymentReviewBack) || navigateBack();
     }
 
     // ---- Hundi Donation ----
 
-    /** Best-effort: the "Hundi" button only renders for temples with
-     * showHundiButton=true, not guaranteed present. Returns false if none found after
+    /** Best-effort: the "Hundi" button is not guaranteed present (and is hidden on iOS
+     * while SevasView's quick actions are gated off). Returns false if none found after
      * scrolling, letting callers skip rather than fail. */
     public boolean openHundiFromSevaList() {
         return scrollUntilVisible(hundiEntryAction) && tapFirstVisible(hundiEntryAction);
     }
 
     public boolean isHundiScreenVisible() {
-        return isAnyVisible(hundiAmountLabel);
+        return isAnyVisible(hundiScreenTitle, hundiAmountField);
     }
 
     public boolean enterHundiAmount(String amount) {
-        return typeIntoFieldAtIndex(hundiEditTextField, 0, amount);
+        return typeIntoFieldAtIndex(hundiAmountField, 0, amount);
     }
 
     public boolean enterHundiPersonName(String name) {
-        return typeIntoFieldAtIndex(hundiEditTextField, 1, name);
+        return typeIntoFieldAtIndex(hundiTextField, 1, name);
     }
 
     public boolean isHundiDonateActionVisible() {
@@ -245,6 +280,7 @@ public class BookSevaPage extends BasePage {
      * validation blocks the screen from advancing, so this never risks reaching
      * Payment. Never call this after entering valid data. */
     public boolean tapHundiDonate() {
+        hideKeyboardIfShown();
         return tapFirstVisible(hundiDonateAction);
     }
 
@@ -257,12 +293,8 @@ public class BookSevaPage extends BasePage {
     }
 
     public boolean navigateBackFromHundi() {
-        try {
-            driver.navigate().back();
-            return true;
-        } catch (RuntimeException exception) {
-            return false;
-        }
+        hideKeyboardIfShown();
+        return tapFirstVisible(hundiBack) || navigateBack();
     }
 
     // ---- Frequent seva / Reorder ----
@@ -283,13 +315,13 @@ public class BookSevaPage extends BasePage {
     }
 
     public boolean isReorderActionVisible() {
-        return isAnyVisible(frequentReorderAction);
+        return isAnyVisible(frequentDetailsReorderAction, frequentReorderAction);
     }
 
     /** Reorder starts a brand-new booking pre-filled with the previous order's
      * temple/seva/priest, landing on the same Booking Details screen already covered
      * by isBookingDetailsScreenVisible()/tapBookThisSeva() flows above. */
     public boolean tapReorderFromFrequentOrderDetails() {
-        return tapFirstVisible(frequentReorderAction);
+        return tapFirstVisible(frequentDetailsReorderAction, frequentReorderAction);
     }
 }

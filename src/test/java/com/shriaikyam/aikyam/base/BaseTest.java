@@ -72,7 +72,7 @@ public abstract class BaseTest {
     }
 
     private static final String DEFAULT_APPIUM_SERVER_URL = "http://127.0.0.1:4723";
-    private static final String DEFAULT_DEVICE_NAME = "iPhone 16 Pro";
+    private static final String DEFAULT_DEVICE_NAME = "iPhone 17 Pro";
     /** Dev-Debug configuration of the AikyamDevotee-Dev scheme. Never point this suite at
      * the prod bundle (com.shriaikyam.ikyam): it writes to the account it runs as. */
     private static final String DEFAULT_BUNDLE_ID = "com.shriaikyam.ikyam.dev";
