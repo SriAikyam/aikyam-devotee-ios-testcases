@@ -5,6 +5,9 @@ import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 
+import org.openqa.selenium.support.ui.WebDriverWait;
+
+import java.util.List;
 import java.util.Map;
 
 /** The Settings hub (SettingsView), reached via ProfilePage.openSettingsHub() - reused
@@ -116,6 +119,39 @@ public class SettingsPage extends BasePage {
     public boolean isUserListContentPresent(String emptyStateText) {
         return isAnyVisible(userListContentSignal, id("following.empty"), id("followers.empty"),
                 textContains(emptyStateText));
+    }
+
+    private final By savedPostSaveAction = AppiumBy.accessibilityId("feed.post.save");
+    /** The destructive confirm on SavedPostsScreen's "Unsave post?" alert. */
+    private final By unsaveConfirmAction = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'Unsave'");
+
+    /** Unsaves the first post listed on Saved Posts and confirms the alert the screen
+     * raises. Returns false once there is nothing left to unsave.
+     *
+     * SavedPostsScreen passes requiresUnsaveConfirmation: true, so the bookmark does not
+     * flip until the "Unsave post?" alert is confirmed. FeedPage's own handler
+     * deliberately taps Cancel on that alert - correct on the feed, where the alert is an
+     * interruption, and exactly wrong here, where confirming it is the point. Hence a
+     * separate helper rather than reusing FeedPage.tapFirstSaveAction(), which also waits
+     * on isAnyFeedItemVisible() and so would time out on the last row. */
+    public boolean unsaveFirstListedPost(String emptyStateText) {
+        int before = visibleElements(savedPostSaveAction).size();
+        if (before == 0) {
+            return false;
+        }
+        if (!tapFirstVisible(savedPostSaveAction)) {
+            return false;
+        }
+        tapFirstVisible(unsaveConfirmAction);
+        try {
+            new WebDriverWait(driver, DEFAULT_TIMEOUT).until(ignored ->
+                    visibleElements(savedPostSaveAction).size() < before
+                            || isEmptyStateShown(emptyStateText));
+            return true;
+        } catch (RuntimeException timedOut) {
+            return false;
+        }
     }
 
     public boolean tapLogoutConfirm() {

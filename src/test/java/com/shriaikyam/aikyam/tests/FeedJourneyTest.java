@@ -20,6 +20,8 @@ import com.shriaikyam.aikyam.categories.P0;
 public class FeedJourneyTest extends BaseTest {
 
     private static final String SAVED_POSTS_EMPTY = "No saved posts";
+    /** Enough to clear litter from interrupted runs without spinning on a broken unsave. */
+    private static final int MAX_SAVED_POSTS_DRAIN = 10;
 
     @Before
     public void returnToFeed() {
@@ -37,9 +39,7 @@ public class FeedJourneyTest extends BaseTest {
     public void TC180_Verify_Saved_Post_Appears_In_Saved_Posts_And_Unsave_Removes_It() {
         FeedPage feedPage = new FeedPage(driver);
 
-        Assert.assertTrue("Precondition: Saved Posts must start empty on this account",
-                openSavedPosts().isEmptyStateShown(SAVED_POSTS_EMPTY));
-        backToFeed();
+        ensureSavedPostsEmpty();
 
         feedPage.tapFirstSaveAction();
         boolean stillSaved = true;
@@ -72,8 +72,8 @@ public class FeedJourneyTest extends BaseTest {
         feedPage.tapFirstNamaskaraAction();
         boolean toggled = true;
         try {
-            Assert.assertNotEquals("Namaskara should change the visible counts",
-                    before, feedPage.captureNumericCountsSignature());
+            Assert.assertTrue("Namaskara should change the visible counts (was " + before + ")",
+                    feedPage.waitForCountsSignatureToChangeFrom(before));
 
             // A second tap while the first is still being saved is ignored by the app.
             pauseForServer();
@@ -187,6 +187,34 @@ public class FeedJourneyTest extends BaseTest {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /** Establish the empty Saved Posts state this test needs, rather than assert it.
+     *
+     * This was an assertion ("Precondition: Saved Posts must start empty on this
+     * account"), which left the test unable to recover from its own interruption: the
+     * cleanup that unsaves lives in a finally block, so a run killed mid-test - or one
+     * that failed on the precondition itself, before any cleanup could run - left a post
+     * saved, and every later run then failed on the precondition instead of on anything
+     * the product did. A smoke gate that a single interrupted run can disable permanently
+     * is not a gate. Draining is idempotent: already-empty costs one check.
+     *
+     * The loop stays bounded so a genuinely broken unsave surfaces as a failure instead
+     * of spinning, and the assertion below still fails loudly in that case - but now it
+     * means "unsave does not work", not "a previous run left litter". */
+    private void ensureSavedPostsEmpty() {
+        SettingsPage saved = openSavedPosts();
+        for (int attempt = 0; attempt < MAX_SAVED_POSTS_DRAIN
+                && !saved.isEmptyStateShown(SAVED_POSTS_EMPTY); attempt++) {
+            if (!saved.unsaveFirstListedPost(SAVED_POSTS_EMPTY)) {
+                break;
+            }
+        }
+        Assert.assertTrue("Saved Posts should be drained to empty before the test body "
+                        + "(unsave appears broken, or the list is longer than "
+                        + MAX_SAVED_POSTS_DRAIN + " posts)",
+                saved.isEmptyStateShown(SAVED_POSTS_EMPTY));
+        backToFeed();
     }
 
     private SettingsPage openSavedPosts() {

@@ -5,7 +5,6 @@ import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.HomePage;
 import com.shriaikyam.aikyam.pages.MusicPage;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -127,7 +126,12 @@ public class MusicTest extends BaseTest {
                 musicPage.startPlaybackFromCurrentDestination());
 
         Assert.assertTrue("Back should leave the full player", musicPage.navigateBack());
-        Assume.assumeTrue("Skipping: no mini player after leaving the full player",
+        // Assertion, not Assume: this is a P0 gate. An assumeTrue here reported "skipped"
+        // when the mini player failed to appear, and a skip reads as green in CI - so the
+        // test opted out in exactly the case it exists to catch. The mini player is not
+        // optional to this test either: the comment below notes its Play button is the
+        // only control that can start playback, so without it the rest cannot run.
+        Assert.assertTrue("Mini player should appear after leaving the full player",
                 musicPage.isMiniPlayerVisible());
 
         // Playback has to be started deliberately - the track loads paused, and the full

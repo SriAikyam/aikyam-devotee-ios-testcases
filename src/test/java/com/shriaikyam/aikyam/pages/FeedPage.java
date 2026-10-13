@@ -441,13 +441,21 @@ public class FeedPage {
         if (!visibleElements(locator).isEmpty()) {
             return true;
         }
+        // FeedPage does not extend BasePage, so it cannot reuse scrollBackUntilVisible.
+        // It can still borrow that helper's key property: stop as soon as there is nothing
+        // left to reveal. Without this the loop always spent all 10 swipes on a miss, and
+        // it is reached from tapAllPostsFilter(), which runs in FeedJourneyTest's @Before -
+        // so every journey test paid for the wasted swipes.
         for (int attempt = 0; attempt < 10; attempt++) {
+            if (BasePage.isAtTopOfScroll(driver)) {
+                break;
+            }
             swipeDown();
             if (!visibleElements(locator).isEmpty()) {
                 return true;
             }
         }
-        return false;
+        return !visibleElements(locator).isEmpty();
     }
 
     public boolean tapAllPostsFilter() {
@@ -782,6 +790,25 @@ public class FeedPage {
         return best == null ? null : displayNameFromLabel(best.getAttribute("label"));
     }
 
+    /** Mirror of {@link #waitForFirstPostAuthorToChangeFrom} for the engagement counts.
+     *
+     * The counts settle asynchronously after a Namaskara tap, so reading them with a bare
+     * captureNumericCountsSignature() immediately after the tap races that update. That is
+     * how TC181 failed on 4 Oct - "Namaskara should change the visible counts. Actual:
+     * |/||/||/" is the signature read before any count had been written. The test's second
+     * assertion already waits (waitForCountsSignature); this gives the first one the same
+     * footing. */
+    public boolean waitForCountsSignatureToChangeFrom(String previous) {
+        try {
+            return new WebDriverWait(driver, SCROLL_TIMEOUT).ignoring(StaleElementReferenceException.class).until(ignored -> {
+                String now = captureNumericCountsSignature();
+                return now != null && !now.equals(previous);
+            });
+        } catch (RuntimeException timeout) {
+            return false;
+        }
+    }
+
     public boolean waitForFirstPostAuthorToChangeFrom(String previous) {
         try {
             return new WebDriverWait(driver, SCROLL_TIMEOUT).ignoring(StaleElementReferenceException.class).until(ignored -> {
@@ -798,6 +825,12 @@ public class FeedPage {
     }
 
     public void swipeDown() {
+        // isAtTopOfScroll, not isAtTopOfFeed: this method is also used on Saved Posts and
+        // other .refreshable lists where the feed's "allPosts" marker is absent, and a
+        // downward drag at the top of those is a pull-to-refresh rather than a scroll.
+        if (BasePage.isAtTopOfScroll(driver)) {
+            return;
+        }
         swipeVertical(0.30, 0.75);
     }
 
