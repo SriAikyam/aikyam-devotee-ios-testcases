@@ -7,7 +7,6 @@ import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,11 +22,17 @@ public class DeepLinkPage extends BasePage {
         super(driver);
     }
 
+    /** The simulator cannot verify universal links, so https share links are fired as the
+     * equivalent aikyam:// URL, which ShareLinkRouter routes identically. */
     public boolean fire(String url) {
+        String link = url.replaceFirst("^https?://[^/]+/", "aikyam://");
+        String udid = System.getProperty("appium.udid", "booted");
         try {
-            driver.executeScript("mobile: deepLink", Map.of("url", url, "bundleId", DEV_BUNDLE_ID));
-            return true;
-        } catch (RuntimeException e) {
+            Process p = new ProcessBuilder("xcrun", "simctl", "openurl", udid, link)
+                    .redirectErrorStream(true).start();
+            p.getInputStream().readAllBytes();
+            return p.waitFor() == 0;
+        } catch (java.io.IOException | InterruptedException e) {
             return false;
         }
     }
@@ -41,13 +46,12 @@ public class DeepLinkPage extends BasePage {
         }
     }
 
-    /** Reads the share link out of the open native chooser's preview, or null. */
+    /** Reads the link from the DEBUG-only share.link probe on the share sheet, or null. */
     public String readLinkFromShareSheet() {
         try {
             WebElement el = new WebDriverWait(driver, SHORT_TIMEOUT).ignoring(StaleElementReferenceException.class)
-                    .until(d -> d.findElements(textContains("shriaikyam.com/p/")).stream().findFirst().orElse(null));
-            String label = el.getAttribute("label");
-            Matcher m = SHORT_LINK.matcher(label == null ? el.getText() : label);
+                    .until(d -> d.findElements(id("share.link")).stream().findFirst().orElse(null));
+            Matcher m = SHORT_LINK.matcher(el.getAttribute("label"));
             return m.find() ? m.group() : null;
         } catch (RuntimeException e) {
             return null;

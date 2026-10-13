@@ -92,11 +92,11 @@ public class AppsPage extends BasePage {
             return super.navigateBack();
         }
         swipeFromLeftEdge();
-        if (waitUntilGone(webView, webViewById)) {
+        if (waitUntilGone(DEFAULT_TIMEOUT, webView, webViewById)) {
             return true;
         }
         super.navigateBack();
-        return waitUntilGone(webView, webViewById);
+        return waitUntilGone(DEFAULT_TIMEOUT, webView, webViewById);
     }
 
     private void swipeFromLeftEdge() {
