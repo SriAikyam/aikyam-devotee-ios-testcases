@@ -45,7 +45,12 @@ public class EventsPage extends BasePage {
     }
 
     public boolean isAnyEventCardVisible() {
-        return isAnyVisible(detailsAction, emptyState);
+        try {
+            waitForAnyVisible(detailsAction, emptyState);
+            return true;
+        } catch (RuntimeException timedOut) {
+            return false;
+        }
     }
 
     /**
