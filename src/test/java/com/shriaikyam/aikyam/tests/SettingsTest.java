@@ -110,21 +110,6 @@ public class SettingsTest extends BaseTest {
         settingsPage.navigateBack();
     }
 
-    private boolean waitForPhoneScreen(LoginPage loginPage) {
-        for (int attempt = 0; attempt < 25; attempt++) {
-            if (loginPage.isPhoneNumberScreenVisible()) {
-                return true;
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
-        }
-        return loginPage.isPhoneNumberScreenVisible();
-    }
-
     /** Best-effort: catches Throwable, not just RuntimeException - completeOtpEntry()
      * uses real Assert.assertTrue() calls (AssertionError, not a RuntimeException), so
      * a hiccup here must not escape uncaught and masquerade as this test's own result

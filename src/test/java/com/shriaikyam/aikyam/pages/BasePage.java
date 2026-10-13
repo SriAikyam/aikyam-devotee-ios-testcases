@@ -85,8 +85,12 @@ public abstract class BasePage {
      * transition actually settle before the caller checks what screen it landed on,
      * rather than racing a Compose animation that's still mid-flight. */
     protected boolean waitUntilGone(By... locators) {
+        return waitUntilGone(SHORT_TIMEOUT, locators);
+    }
+
+    protected boolean waitUntilGone(Duration timeout, By... locators) {
         try {
-            return new WebDriverWait(driver, SHORT_TIMEOUT)
+            return new WebDriverWait(driver, timeout)
                     .until(ignored -> Arrays.stream(locators)
                             .flatMap(locator -> driver.findElements(locator).stream())
                             .noneMatch(WebElement::isDisplayed));
@@ -315,9 +319,11 @@ public abstract class BasePage {
                 }
             }
         }
-        Dimension size = driver.manage().window().getSize();
-        swipe(driver, size.getWidth() / 2, (int) (size.getHeight() * 0.25),
-                (int) (size.getHeight() * 0.90));
+        if (!isDisplayedNow(driver, "tab.home")) {
+            Dimension size = driver.manage().window().getSize();
+            swipe(driver, size.getWidth() / 2, (int) (size.getHeight() * 0.25),
+                    (int) (size.getHeight() * 0.90));
+        }
         return false;
     }
 
@@ -394,7 +400,65 @@ public abstract class BasePage {
      * leaving the feed scrolled down; a back-button press alone can't fix this since
      * it's a scroll position, not a different screen. */
     protected void swipeDown() {
+        if (isAtTopOfScroll(driver)) {
+            return;
+        }
         swipe(0.30, 0.80);
+    }
+
+    /** A downward drag on the feed's first screen is a pull-to-refresh, not a scroll. */
+    public static boolean isAtTopOfFeed(IOSDriver driver) {
+        return isDisplayedNow(driver, "feed.filter.allPosts");
+    }
+
+    /** Generalisation of {@link #isAtTopOfFeed}: true when whatever scroll view is on
+     * screen is already at its top, feed or not.
+     *
+     * The feed-only check was not enough. Several screens this suite scrolls BACK
+     * through are plain SwiftUI ScrollViews that declare .refreshable -
+     * FamilyProfileScreen and SavedPostsScreen both do - and on those,
+     * "feed.filter.allPosts" is never present, so every backward swipe went through as a
+     * 0.30 -> 0.80 drag on a list already at its top. That is a pull-to-refresh, and the
+     * refresh re-renders the list, which changes the page source - so
+     * scrollWhileContentMoves' "nothing moved" check read it as real movement and let the
+     * loop run its full budget. On the family list that budget is 12, which is why the
+     * screen visibly dragged down over and over during a run.
+     *
+     * Checking the offset first keeps the drag for the only case it was meant for:
+     * content that is genuinely scrolled down. */
+    static boolean isAtTopOfScroll(IOSDriver driver) {
+        if (isAtTopOfFeed(driver)) {
+            return true;
+        }
+        try {
+            for (WebElement scrollView : driver.findElements(
+                    AppiumBy.className("XCUIElementTypeScrollView"))) {
+                if (!scrollView.isDisplayed()) {
+                    continue;
+                }
+                // Direct first child, scoped to this one element - a bounded lookup, not
+                // a document-wide XPath scan.
+                List<WebElement> content = scrollView.findElements(By.xpath("./*[1]"));
+                if (content.isEmpty()) {
+                    continue;
+                }
+                // The first child sitting at or below the scroll view's own top edge
+                // means there is nothing above it left to reveal.
+                return content.get(0).getRect().getY() >= scrollView.getRect().getY();
+            }
+        } catch (RuntimeException ignored) {
+            // Tree changed under us - fall through and allow the swipe.
+        }
+        return false;
+    }
+
+    static boolean isDisplayedNow(IOSDriver driver, String identifier) {
+        try {
+            return driver.findElements(AppiumBy.accessibilityId(identifier)).stream()
+                    .anyMatch(WebElement::isDisplayed);
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     /** Checks visibility, swiping up to reveal further content if not immediately
