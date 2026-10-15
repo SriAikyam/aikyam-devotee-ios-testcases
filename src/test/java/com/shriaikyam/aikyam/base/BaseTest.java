@@ -7,6 +7,7 @@ import com.shriaikyam.aikyam.pages.BasePage;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.appmanagement.ApplicationState;
 import io.appium.java_client.ios.IOSDriver;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import io.appium.java_client.ios.options.XCUITestOptions;
 import org.junit.Before;
 import org.junit.Rule;
@@ -129,7 +130,24 @@ public abstract class BaseTest {
                 // Counterpart of autoGrantPermissions: accepts the system photo/camera/
                 // notification permission alerts as they appear.
                 .setAutoAcceptAlerts(true)
-                .setNewCommandTimeout(Duration.ofSeconds(120));
+                .setNewCommandTimeout(Duration.ofSeconds(120))
+                // WebDriverAgent waits for the app to be "idle" before answering ANY query.
+                // The Explore map never goes idle: GMSMapView animates, fires camera-idle,
+                // re-fetches nearby temples and re-clusters, continuously. That is what made a
+                // plain accessibility-id lookup for "explore.tab.temples" take 241 SECONDS,
+                // a /screenshot take 151s, and eventually left WDA unable to create a session -
+                // the queries were not slow, they were queued behind a quiescence wait that
+                // never finished. Capping the wait makes the driver answer regardless.
+                .setWaitForIdleTimeout(Duration.ofSeconds(3))
+                .amend("appium:waitForQuiescence", false)
+                // Bound the snapshot WDA builds for every element lookup. The Explore Posts
+                // grid - a wall of autoplaying video tiles - keeps invalidating that
+                // snapshot, and an unbounded resolve ran 241s for ONE lookup. Past the
+                // Selenium client's own read timeout the client gives up first, which
+                // leaves the session wedged and poisons every test after it (TC173 did
+                // exactly that, twice). Capping it at 30s turns "poisons the run" into
+                // "this one lookup fails", which the test can report and recover from.
+                .amend("appium:customSnapshotTimeout", 30);
         String platformVersion = getProperty("appium.platformVersion", null);
         if (platformVersion != null) {
             options.setPlatformVersion(platformVersion);
@@ -304,6 +322,14 @@ public abstract class BaseTest {
                     return;
                 }
             }
+            // Backing out did not reach Home. Confirmed live: a run left the app on the
+            // Settings hub - whose back control the loop above could not resolve - and
+            // EVERY later test failed in its own @Before at tapHomeTab(), 22 of them in
+            // one run, none for a reason of its own. A relaunch is the only escape that
+            // does not depend on finding a control on an unknown screen, and it is cheap:
+            // noReset keeps the data container, so the session stays warm and logged in.
+            relaunchApp();
+            tapHomeIfPresent();
         } catch (RuntimeException ignored) {
             // The isolation guard must never itself fail a test.
         } finally {
@@ -314,6 +340,21 @@ public abstract class BaseTest {
     /** A keyboard left open by the previous test covers the floating tab bar. */
     private void dismissSoftKeyboardIfShown() {
         BasePage.hideKeyboardIfShown(driver);
+    }
+
+    /** Last-resort escape for resetToHome(): terminate and reactivate the app so the next
+     * test starts at the tab-bar root. Keeps the login (noReset leaves the data container
+     * in place); only the in-memory navigation stack is lost, which is exactly the point. */
+    private void relaunchApp() {
+        try {
+            driver.terminateApp(bundleId());
+            driver.activateApp(bundleId());
+            new WebDriverWait(driver, Duration.ofSeconds(30))
+                    .until(d -> !d.findElements(HOME_BOTTOM_NAV).isEmpty());
+        } catch (RuntimeException ignored) {
+            // Best-effort, same contract as the rest of the guard: the test body still runs
+            // and fails on its own assertion if Home really is unreachable.
+        }
     }
 
     private boolean tapHomeIfPresent() {

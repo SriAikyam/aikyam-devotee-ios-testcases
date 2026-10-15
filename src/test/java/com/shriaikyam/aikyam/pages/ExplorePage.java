@@ -5,6 +5,7 @@ import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.Point;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.PointerInput;
 import org.openqa.selenium.interactions.Sequence;
@@ -12,12 +13,21 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ExplorePage extends BasePage {
 
     // Map/List segments of ExploreView.mapListToggle. Both are always present on the Temples
     // tab; the active one carries the isSelected trait (see isMapViewActive()).
+    /** Two taps is enough in practice: the first settles the list, the second lands on a
+     * list that is no longer moving. */
+    private static final int SUGGESTION_TAP_ATTEMPTS = 2;
+    private static final int SUGGESTION_SETTLE_POLLS = 12;
+    /** 50 x 400ms = 20s for the first completion to arrive. */
+    private static final int SUGGESTION_ARRIVAL_POLLS = 50;
+    private static final long SUGGESTION_SETTLE_INTERVAL_MS = 400;
+
     private final By mapToggle = id("explore.toggle.map");
     private final By listToggle = id("explore.toggle.list");
 
@@ -51,12 +61,35 @@ public class ExplorePage extends BasePage {
         super(driver);
     }
 
+    /** The selected entity tab survives across sessions (noReset), and the Map/List toggle
+     * exists ONLY under Temples - so a run that ended on Devotees or Posts leaves every
+     * later test waiting 30s for a toggle that cannot appear. Confirmed live: TC072 failed
+     * here, on a screen that was simply still on the Posts tab. Selecting Temples first
+     * makes each test self-correcting rather than dependent on the previous one's cleanup. */
     public void waitUntilLoaded() {
+        if (!isVisibleNow(mapToggle, listToggle)) {
+            selectEntityTab("Temples");
+        }
         waitForAnyVisible(mapToggle, listToggle);
     }
 
     public boolean isExploreVisible() {
         return isAnyVisible(mapToggle) && isAnyVisible(listToggle);
+    }
+
+    /** Absence-oriented counterpart of {@link #isExploreVisible()}.
+     *
+     * Proving a control is GONE with isExploreVisible() is pathological here: it is two
+     * separate isAnyVisible calls, each of which polls for its full 8s budget when the
+     * element is absent, and each poll walks the whole accessibility tree. On the
+     * Devotees/Posts tabs that tree is a grid of dozens of media tiles, so a single walk
+     * runs into minutes - TC176 hung for 8+ minutes on exactly this, and the "4 minute
+     * explore.tab.temples lookup" seen earlier was the same effect, not a slow map.
+     *
+     * isVisibleNow probes once with a 2s cap, which is what BasePage already recommends for
+     * checks the caller will not retry. */
+    public boolean isMapListToggleAbsent() {
+        return !isVisibleNow(mapToggle, listToggle);
     }
 
     public boolean isListContentVisible() {
@@ -127,8 +160,89 @@ public class ExplorePage extends BasePage {
         return isAnyVisible(noLocationsFoundText);
     }
 
+    /** MKLocalSearchCompleter streams results in and REORDERS the list as they land -
+     * confirmed live: the same "Mumbai" query produced two different row orders seconds
+     * apart. A tap sent while that is still happening lands on a row that has already been
+     * replaced, so the dialog simply stays open and the caller sees a successful tap that
+     * did nothing. Wait for the list to stop moving first (two identical consecutive reads
+     * of the visible suggestion labels), then tap, then confirm the dialog actually closed
+     * before reporting success. */
     public boolean selectLocationSuggestion(String cityText) {
-        return tapFirstVisible(withIdLabelContaining("explore.location.suggestion", cityText));
+        By suggestion = withIdLabelContaining("explore.location.suggestion", cityText);
+        for (int attempt = 0; attempt < SUGGESTION_TAP_ATTEMPTS; attempt++) {
+            // An earlier attempt may have landed and only finished dismissing afterwards;
+            // without this the retry finds no rows to tap and reports a failure for a
+            // selection that actually worked.
+            if (!isChangeLocationDialogVisible()) {
+                return true;
+            }
+            waitForSuggestionsToSettle();
+            List<WebElement> rows = visibleElements(suggestion);
+            if (rows.isEmpty()) {
+                continue;
+            }
+            tapSuggestionLabel(rows.get(0));
+            // DEFAULT_TIMEOUT, not SHORT: the tap starts an MKLocalSearch round trip
+            // (resolveCoordinate) and the sheet stays up, showing a spinner, until it
+            // returns - 8s is inside the range that round trip can take.
+            if (waitUntilGone(DEFAULT_TIMEOUT, changeLocationDialogTitle, locationSearchField)) {
+                return true;
+            }
+        }
+        return !isChangeLocationDialogVisible();
+    }
+
+    /** NOT tapElementCenter: the row is a `.buttonStyle(.plain)` Button whose label is an
+     * HStack ending in a Spacer, so SwiftUI hit-tests only the icon-and-text run on the
+     * left - the row's horizontal centre is dead space. Confirmed live against the same
+     * row: a tap at x=201 (centre of a 402pt row) did nothing through WebElement.click(),
+     * `mobile: tap` AND a raw HID tap, while x=100 selected it instantly. Tapping a
+     * quarter of the way in keeps the point inside the text for every suggestion, the
+     * one-line "Mumbai" included.
+     *
+     * Worth reporting separately: the same dead zone applies to a real finger, so most of
+     * each suggestion row is untappable in the shipping UI. */
+    private void tapSuggestionLabel(WebElement row) {
+        Point location = row.getLocation();
+        Dimension size = row.getSize();
+        tapPoint(location.getX() + size.getWidth() / 4, location.getY() + size.getHeight() / 2);
+    }
+
+    /** Two waits, not one. ManualLocationDialog has no loading state between "query typed"
+     * and "completions delivered" - it renders the "No matches found" empty state for that
+     * whole gap, so an empty list says nothing about whether the search has finished.
+     * Confirmed live: the dialog showed "No matches found" for a plain "Mumbai" while the
+     * completer was still working, and a settle loop that only waited ~5s reported zero
+     * suggestions for a query that does have them.
+     *
+     * So: wait for the FIRST suggestion to land, then wait for the list to stop reordering
+     * (MKLocalSearchCompleter streams results in and re-ranks as they arrive). */
+    private void waitForSuggestionsToSettle() {
+        for (int poll = 0; poll < SUGGESTION_ARRIVAL_POLLS && suggestionLabels().isEmpty(); poll++) {
+            pause(SUGGESTION_SETTLE_INTERVAL_MS);
+        }
+        List<String> previous = null;
+        for (int poll = 0; poll < SUGGESTION_SETTLE_POLLS; poll++) {
+            List<String> current = suggestionLabels();
+            if (!current.isEmpty() && current.equals(previous)) {
+                return;
+            }
+            previous = current;
+            pause(SUGGESTION_SETTLE_INTERVAL_MS);
+        }
+    }
+
+    private List<String> suggestionLabels() {
+        List<String> labels = new ArrayList<>();
+        for (WebElement row : visibleElements(id("explore.location.suggestion"))) {
+            try {
+                labels.add(String.valueOf(row.getAttribute("label")));
+            } catch (RuntimeException ignored) {
+                // Row went away mid-read: that is itself movement, so leave it out and let
+                // the next poll compare against a list that no longer contains it.
+            }
+        }
+        return labels;
     }
 
     public boolean isLocationLabelUpdated(String cityText) {
