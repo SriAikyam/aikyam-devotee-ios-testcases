@@ -68,8 +68,16 @@ public class CommentsTest extends BaseTest {
         Assert.assertTrue("Comment text should be enterable", commentsPage.typeComment(comment));
         Assert.assertTrue("Send action should appear once text is entered", commentsPage.isSendActionVisible());
         Assert.assertTrue("Send should be tappable", commentsPage.tapSend());
-        Assert.assertTrue("The new comment should actually appear in the list after posting",
-                commentsPage.waitForCommentToAppear(comment));
+        try {
+            Assert.assertTrue("The new comment should actually appear in the list after posting",
+                    commentsPage.waitForCommentToAppear(comment));
+        } finally {
+            // This test used to post and walk away, so every run added a permanent comment to
+            // a real post on the shared dev account - which is also what pushed later comments
+            // below the fold and made this very assertion flaky. CommentsJourneyTest.TC190
+            // already follows this post-then-delete convention; match it.
+            commentsPage.deleteComment(comment);
+        }
     }
 
     @Category(P0.class)

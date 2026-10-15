@@ -56,13 +56,20 @@ public class CommentsPage extends BasePage {
     /** The new comment lands after the backend round-trip - poll rather than check once
      * immediately after tapSend(). */
     public boolean waitForCommentToAppear(String commentText) {
-        try {
-            waitForAnyVisible(commentText(commentText));
+        By locator = commentText(commentText);
+        // Waiting alone is not enough. A newly posted comment is appended to the END of the
+        // thread, and that thread grows on every suite run (TC090 posted without cleaning up
+        // for a long time), so the new row is routinely below the fold - waitForAnyVisible
+        // would time out on a comment that posted perfectly well. Wait first for the render,
+        // then scroll for it.
+        if (isAnyVisible(locator)) {
             return true;
-        } catch (RuntimeException exception) {
-            return false;
         }
+        return scrollUntilVisible(COMMENT_SCROLL_BUDGET, locator);
     }
+
+    /** Threads on the shared dev account can be long; 4 swipes did not reach the end. */
+    private static final int COMMENT_SCROLL_BUDGET = 10;
 
     /** FlatBackScreenHeader's back button carries no label or identifier of its own (shared
      * component), so take the button on the title's row, left of it. Falls back to the
@@ -245,19 +252,25 @@ public class CommentsPage extends BasePage {
         return tapFirstVisible(deleteMenuItem, deleteMenuText);
     }
 
+    /* Show more / Show less sit at the bottom of the comment they belong to, and TC193
+     * deliberately posts a ~700-character one. Expanding it makes the row taller than the
+     * viewport, so the control the next assertion looks for is off-screen - a bare
+     * visibility probe then reports false for a control that is present and working.
+     * Scrolling for it matches how the rest of the suite treats "visible" (see
+     * FamilyMembersPage scrolling to its member-count chip before asserting). */
     public boolean isShowMoreVisible() {
-        return isAnyVisible(showMoreAction);
+        return isAnyVisible(showMoreAction) || scrollUntilVisible(COMMENT_SCROLL_BUDGET, showMoreAction);
     }
 
     public boolean tapShowMore() {
-        return tapFirstVisible(showMoreAction);
+        return isShowMoreVisible() && tapFirstVisible(showMoreAction);
     }
 
     public boolean isShowLessVisible() {
-        return isAnyVisible(showLessAction);
+        return isAnyVisible(showLessAction) || scrollUntilVisible(COMMENT_SCROLL_BUDGET, showLessAction);
     }
 
     public boolean tapShowLess() {
-        return tapFirstVisible(showLessAction);
+        return isShowLessVisible() && tapFirstVisible(showLessAction);
     }
 }

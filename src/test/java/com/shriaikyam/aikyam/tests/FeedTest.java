@@ -192,13 +192,22 @@ public class FeedTest extends BaseTest {
         feedPage.waitUntilLoaded();
         String before = feedPage.captureNumericCountsSignature();
         feedPage.tapFirstNamaskaraAction();
-        String after = feedPage.captureNumericCountsSignature();
 
-        Assert.assertNotEquals(
-                "Tapping Namaskara should change the visible like-count signature, not just leave the feed on screen",
-                before,
-                after
-        );
+        try {
+            // The counts are written after the server round-trip, so reading them straight
+            // after the tap races that update - the same defect FeedJourneyTest.TC181 had.
+            Assert.assertTrue(
+                    "Tapping Namaskara should change the visible like-count signature, not just "
+                            + "leave the feed on screen (was " + before + ")",
+                    feedPage.waitForCountsSignatureToChangeFrom(before)
+            );
+        } finally {
+            // This test toggled a like on a real post of the shared dev account and used to
+            // walk away, leaving it toggled for every later run (and for whoever looks at the
+            // account). Toggle it back.
+            feedPage.tapFirstNamaskaraAction();
+            feedPage.waitForCountsSignature(before);
+        }
     }
 
     @Test

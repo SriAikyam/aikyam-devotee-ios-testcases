@@ -271,8 +271,32 @@ public class FamilyMembersPage extends BasePage {
         } catch (RuntimeException exception) {
             return null;
         }
-        WebElement fresh = scrollToField(addFullNameField);
-        return fresh == null ? null : fieldValue(fresh);
+        return readSettledFieldValue(addFullNameField);
+    }
+
+    /** Reads a field only once its value has stopped changing.
+     *
+     * sendKeys() returns as soon as the keystrokes are dispatched, not once SwiftUI has run
+     * the field's Binding setter - and for Full Name the 20-char cap lives in that setter
+     * (FamilyMemberFormFieldsView.fullNameBinding). Reading straight after typing therefore
+     * races the cap and sees the raw input: TC222 failed on 13 Oct with
+     * "held 'Abcdefghijklmnopqrstuvwxy'", all 25 characters, against an app that does cap
+     * correctly. Two identical consecutive reads mean the binding has settled; the bound
+     * attempt count keeps a genuinely broken field from spinning. */
+    private String readSettledFieldValue(By locator) {
+        String last = null;
+        for (int attempt = 0; attempt < 10; attempt++) {
+            WebElement fresh = scrollToField(locator);
+            if (fresh == null) {
+                return last;
+            }
+            String now = fieldValue(fresh);
+            if (now != null && now.equals(last)) {
+                return now;
+            }
+            last = now;
+        }
+        return last;
     }
 
     /** Visible labels and values on screen, for failure messages. */

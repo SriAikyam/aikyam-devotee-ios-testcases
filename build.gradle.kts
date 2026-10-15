@@ -17,8 +17,12 @@ dependencies {
 }
 
 tasks.test {
-    maxHeapSize = "256m"
-    jvmArgs("-XX:MaxMetaspaceSize=128m")
+    // 256m survived a 27-test smoke run but not the full suite: a 106-test run accumulates
+    // page sources and per-test driver state until the forked JVM is killed. The 13 Oct full
+    // run died at exit 137 (SIGKILL) after 41 tests, and every "NoSuchSessionException" /
+    // "UnreachableBrowserException" after that point was the dying JVM, not the product.
+    maxHeapSize = "2g"
+    jvmArgs("-XX:MaxMetaspaceSize=512m", "-XX:+HeapDumpOnOutOfMemoryError")
 
     // Forward -Dappium.* from the Gradle command line into the forked test JVM. BaseTest
     // reads these with System.getProperty, and Gradle does not propagate its own JVM's
@@ -64,8 +68,33 @@ tasks.register<Test>("p0Smoke") {
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnit { includeCategories("com.shriaikyam.aikyam.categories.P0") }
-    maxHeapSize = "256m"
-    jvmArgs("-XX:MaxMetaspaceSize=128m")
+    // 256m survived a 27-test smoke run but not the full suite: a 106-test run accumulates
+    // page sources and per-test driver state until the forked JVM is killed. The 13 Oct full
+    // run died at exit 137 (SIGKILL) after 41 tests, and every "NoSuchSessionException" /
+    // "UnreachableBrowserException" after that point was the dying JVM, not the product.
+    maxHeapSize = "2g"
+    jvmArgs("-XX:MaxMetaspaceSize=512m", "-XX:+HeapDumpOnOutOfMemoryError")
+    listOf("appium.worker", "appium.bundleId", "appium.platformVersion", "appium.deviceName",
+        "appium.serverUrl", "appium.udid").forEach { key ->
+        System.getProperty(key)?.let { value -> systemProperty(key, value) }
+    }
+}
+
+// Everything the P0 smoke gate does NOT cover - the 79 tests outside @Category(P0).
+// Exists because "run the rest" was otherwise only reachable by running all 106 and
+// re-paying the ~14 min the gate already proved green. Same device/Appium properties as
+// `test`, and it writes to its own results directory so a p1Rest run never overwrites a
+// p0Smoke report.
+tasks.register<Test>("p1Rest") {
+    group = "verification"
+    description = "Runs every test NOT tagged @Category(P0) - the non-smoke remainder."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnit { excludeCategories("com.shriaikyam.aikyam.categories.P0") }
+    maxHeapSize = "2g"
+    jvmArgs("-XX:MaxMetaspaceSize=512m", "-XX:+HeapDumpOnOutOfMemoryError")
+    reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/p1Rest"))
+    reports.html.outputLocation.set(layout.buildDirectory.dir("reports/tests/p1Rest"))
     listOf("appium.worker", "appium.bundleId", "appium.platformVersion", "appium.deviceName",
         "appium.serverUrl", "appium.udid").forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
