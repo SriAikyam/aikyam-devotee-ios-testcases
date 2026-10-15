@@ -190,6 +190,7 @@ public abstract class BaseTest {
                     options
             );
             DRIVER_CREATIONS.incrementAndGet();
+            applySnapshotLimits(driver);
             if (reuseDriverAcrossTests()) {
                 sharedDriver = driver;
             }
@@ -297,6 +298,34 @@ public abstract class BaseTest {
      * Best-effort by design: if Home genuinely cannot be reached the test still runs and
      * fails on its own assertion with full diagnostics, which is far easier to triage than
      * a setUp() error that obscures which test was affected. */
+    /** Bound the element snapshot WDA rebuilds on every lookup.
+     *
+     * Passed as an `appium:customSnapshotTimeout` CAPABILITY first; the Appium log showed
+     * 241s lookups still getting through, so it is applied here through the settings
+     * endpoint instead, which the XCUITest driver honours at runtime.
+     *
+     * Why it matters: the Explore Posts grid is a wall of autoplaying video tiles that
+     * keeps invalidating the snapshot. An unbounded resolve outruns the Selenium client's
+     * own read timeout, and the client giving up first is what leaves WebDriverAgent
+     * wedged - after which no session can be created at all and every remaining test
+     * fails for a reason of its own. A bounded snapshot turns that into one failed
+     * lookup, which the test reports and the next test recovers from.
+     *
+     * Best-effort: an older driver that does not know these settings must not fail setUp.
+     */
+    private static void applySnapshotLimits(IOSDriver driver) {
+        try {
+            driver.setSetting("customSnapshotTimeout", 20);
+        } catch (RuntimeException ignored) {
+            // Setting unsupported on this driver build; the capability remains as a hint.
+        }
+        try {
+            driver.setSetting("waitForIdleTimeout", 3);
+        } catch (RuntimeException ignored) {
+            // As above.
+        }
+    }
+
     private void resetToHome() {
         // Probe cheaply. The configured 5s implicit wait would otherwise be paid on every
         // negative lookup below (up to five back attempts). Restored in the finally block
