@@ -16,7 +16,7 @@ import org.junit.runners.MethodSorters;
  * had any automation before this pass; it had been assumed to need separate credentials.
  *
  * Pinned to TC-number order for the same reason as AuthenticationTest: TC161 switches
- * the shared session onto the temple account and TC170 switches it back, so every test
+ * the shared session onto the temple account and TC270 switches it back, so every test
  * in between - and every other class that runs after this one - finds the session in
  * the state it expects.
  *
@@ -27,6 +27,30 @@ import org.junit.runners.MethodSorters;
 public class PriestTest extends BaseTest {
 
     private static final String TEMPLE_ACCOUNT_NAME = "Chennakesava Temple";
+
+    /** Puts the shared session on the temple account.
+     *
+     * This and TC270 were missing from the iOS port, while the three tests that DEPEND on
+     * them (TC164/166/168) were ported - so the priest tests ran against the devotee
+     * account and asserted priest-only UI, and nothing restored the devotee context
+     * afterwards. In the 14 Oct p1Rest run that cost 22 of 37 failures: PriestTest's own 2,
+     * plus every class sorting after it (ProfileTest 4, SearchJourneyTest 5, SettingsTest 6,
+     * StoriesJourneyTest 5) failing wholesale on timeouts. The class doc above already
+     * described this contract; only the tests enforcing it were absent. */
+    @Test
+    public void TC161_Verify_Switch_To_Temple_Account() {
+        ProfilePage profilePage = new ProfilePage(driver);
+        SettingsPage settingsPage = new SettingsPage(driver);
+        PriestPage priestPage = new PriestPage(driver);
+
+        Assert.assertTrue("Settings hub should open", profilePage.openSettingsHub());
+        Assert.assertTrue("Switch account section should be visible",
+                settingsPage.isSwitchAccountSectionVisible());
+        Assert.assertTrue("Temple account should be selectable",
+                settingsPage.switchToTempleAccount());
+        Assert.assertTrue("Priest bottom navigation should appear",
+                priestPage.isPriestBottomNavVisible());
+    }
 
     @Test
     public void TC164_Verify_Priest_Events_Tab_Opens() {
@@ -62,4 +86,17 @@ public class PriestTest extends BaseTest {
         );
     }
 
+
+    /** Restores the shared session to the personal/devotee account. Every other class in
+     * the suite assumes that starting state - without this, PriestTest leaves the session
+     * on the temple account and poisons everything that follows it. */
+    @Test
+    public void TC270_Verify_Switch_Back_To_Personal_Account() {
+        ProfilePage profilePage = new ProfilePage(driver);
+        SettingsPage settingsPage = new SettingsPage(driver);
+
+        Assert.assertTrue("Settings hub should open", profilePage.openSettingsHub());
+        Assert.assertTrue("Personal account should be selectable",
+                settingsPage.switchToPersonalAccount());
+    }
 }

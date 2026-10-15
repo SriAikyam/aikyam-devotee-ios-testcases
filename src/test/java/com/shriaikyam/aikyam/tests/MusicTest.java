@@ -43,6 +43,24 @@ public class MusicTest extends BaseTest {
      * The full player's play/pause, seek, favourite, repeat and lyrics controls all pass
      * contentDescription = null and cannot be located, so pause/resume/seek/favourite/
      * repeat/lyrics are NOT covered here. See the accessibility gap noted on MusicPage. */
+    /** Ported from Android TC116. Android guards this with Assume.assumeTrue when no
+     * "See All" is on screen; iOS asserts instead - music.section.seeall is always rendered
+     * by MusicHomeComponents for a populated section, so a missing one is a real failure
+     * rather than a reason to quietly skip. */
+    @Test
+    public void TC116_Verify_See_All_Opens_Section_Details() {
+        HomePage homePage = new HomePage(driver);
+        MusicPage musicPage = new MusicPage(driver);
+
+        homePage.tapMusicTab();
+        musicPage.waitUntilLoaded();
+        Assert.assertTrue("Music home should offer a See All on at least one section",
+                musicPage.isSeeAllVisible());
+        Assert.assertTrue("See All should be tappable", musicPage.tapFirstSeeAll());
+        Assert.assertTrue("Section details screen should open",
+                musicPage.isSectionDetailsScreenVisible());
+    }
+
     @Category(P0.class)
     @Test
     public void TC143_Verify_Tapping_A_Track_Starts_Playback() {

@@ -36,6 +36,35 @@ public class ProfileTest extends BaseTest {
 
     /** Bio field, part of the same Edit Profile screen as TC047 but not covered
      * there - real round-trip save+display check, same pattern as name/username. */
+    /** Ported from Android TC120. Reads the starting selection and restores it in a finally
+     * block - this writes to the shared dev account, and a test that leaves the gender
+     * flipped makes its own next run start from a different state. */
+    @Test
+    public void TC120_Verify_Profile_Edit_Gender_Selection_Persists() {
+        ProfilePage profilePage = new ProfilePage(driver);
+
+        Assert.assertTrue("Profile should open", profilePage.openProfile());
+        profilePage.waitUntilLoaded();
+        Assert.assertTrue("Edit profile should open", profilePage.openEditProfile());
+
+        boolean startedAsFemale = profilePage.isGenderSelected("Female");
+        String original = startedAsFemale ? "Female" : "Male";
+        String switched = startedAsFemale ? "Male" : "Female";
+
+        try {
+            Assert.assertTrue("Gender option should be tappable", profilePage.selectGender(switched));
+            Assert.assertTrue("Update should save the new gender", profilePage.tapUpdate());
+
+            Assert.assertTrue("Edit profile should reopen", profilePage.openEditProfile());
+            Assert.assertTrue("New gender should persist after save and reopen",
+                    profilePage.isGenderSelected(switched));
+        } finally {
+            if (profilePage.selectGender(original)) {
+                profilePage.tapUpdate();
+            }
+        }
+    }
+
     @Test
     public void TC119_Verify_Profile_Edit_Bio_Field() {
         ProfilePage profilePage = new ProfilePage(driver);

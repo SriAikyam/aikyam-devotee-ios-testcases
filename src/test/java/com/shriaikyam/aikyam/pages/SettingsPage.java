@@ -195,6 +195,13 @@ public class SettingsPage extends BasePage {
         return tapFirstVisible(text(accountName), textContains(accountName));
     }
 
+    /** Counterpart of switchToPersonalAccount. The switcher lists the temple account by its
+     * own identifier; the display name is the fallback for builds that predate it. */
+    public boolean switchToTempleAccount() {
+        openAccountSwitcherIfClosed();
+        return tapFirstVisible(id("accountSwitcher.temple"), textContains("Temple"));
+    }
+
     public boolean switchToPersonalAccount() {
         openAccountSwitcherIfClosed();
         return tapFirstVisible(id("accountSwitcher.personal"), text("Personal Account"));
