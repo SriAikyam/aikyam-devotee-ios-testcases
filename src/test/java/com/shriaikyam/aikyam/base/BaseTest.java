@@ -4,6 +4,8 @@ import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.LoginPage;
 import com.shriaikyam.aikyam.pages.OnboardingPage;
 import com.shriaikyam.aikyam.pages.BasePage;
+import com.shriaikyam.aikyam.pages.ProfilePage;
+import com.shriaikyam.aikyam.pages.SettingsPage;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.appmanagement.ApplicationState;
 import io.appium.java_client.ios.IOSDriver;
@@ -276,6 +278,8 @@ public abstract class BaseTest {
 
     /** The Home tab of AikyamCustomTabBar (MainTabView), by its stable identifier. */
     private static final By HOME_BOTTOM_NAV = AppiumBy.accessibilityId("tab.home");
+    /** Present only while the session is on the temple/priest account. */
+    private static final By TEMPLE_BOTTOM_NAV = AppiumBy.accessibilityId("tab.temple");
 
     /** Button labels of the iOS system permission alerts. autoAcceptAlerts normally
      * handles these; this is the fallback for one raised mid-reset. "Don't Allow" is
@@ -335,6 +339,7 @@ public abstract class BaseTest {
             dismissSoftKeyboardIfShown();
             dismissKnownPermissionDialog();
             dismissDiscardPostDialogIfPresent();
+            restorePersonalAccountIfOnTemple();
             if (tapHomeIfPresent()) {
                 return;
             }
@@ -363,6 +368,32 @@ public abstract class BaseTest {
             // The isolation guard must never itself fail a test.
         } finally {
             driver.manage().timeouts().implicitlyWait(IMPLICIT_WAIT);
+        }
+    }
+
+    /** The temple/priest account has no Home tab and no feed at all, so a session left on
+     * it fails whole classes for a reason none of them can see. noReset keeps the signed-in
+     * context across runs, so this does not stay inside one run: a run that ends on the
+     * temple account strands EVERY later run, until someone switches back by hand. That is
+     * exactly what happened between 15 and 24 Oct - the suite sat on the temple account for
+     * nine days, and TC270, the test meant to switch back, could not do it because the
+     * priest switcher carries none of the identifiers it looked for.
+     *
+     * Cheap to check (tab.temple is only ever present in that context) and it costs one
+     * lookup per test, against losing a whole run. */
+    private void restorePersonalAccountIfOnTemple() {
+        if (driver.findElements(TEMPLE_BOTTOM_NAV).isEmpty()) {
+            return;
+        }
+        try {
+            ProfilePage profilePage = new ProfilePage(driver);
+            SettingsPage settingsPage = new SettingsPage(driver);
+            if (profilePage.openSettingsHub()) {
+                settingsPage.switchToPersonalAccount();
+            }
+        } catch (RuntimeException ignored) {
+            // Same contract as the rest of the guard: never fail a test from here. The test
+            // body still runs and fails on its own assertion if the context is wrong.
         }
     }
 
