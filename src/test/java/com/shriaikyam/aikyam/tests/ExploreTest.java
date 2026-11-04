@@ -5,7 +5,6 @@ import com.shriaikyam.aikyam.pages.ExplorePage;
 import com.shriaikyam.aikyam.pages.HomePage;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -19,15 +18,6 @@ import org.junit.runners.MethodSorters;
 // already applied to PostTest/SettingsTest for the same class of issue.
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ExploreTest extends BaseTest {
-
-    /** ExploreScreen's location chip ("Based on your current location" + edit icon, the
-     * only way into the change-location dialog) is present in the app source on both main
-     * and the current feature branch, but is absent from the build installed on the test
-     * device - confirmed live in Map view AND List view, with location permission granted.
-     * Skip rather than fail: these three tests are valid again the moment the device gets
-     * a build that renders it, which an @Ignore would silently keep them from doing. */
-    private static final String SKIP_NO_LOCATION_CHIP =
-            "Skipping: this build's Explore screen renders no change-location chip";
 
     /** Explore remembers the last-used Map/List view across app sessions (noReset=true),
      * so any run left in List view makes TC065's "Map is the default" check fail on the
@@ -55,6 +45,18 @@ public class ExploreTest extends BaseTest {
     }
 
     @Test
+    public void TC065_Verify_Explore_Screen_Opens_With_Map_Default() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilLoaded();
+
+        Assert.assertTrue("Explore screen (Map/List toggle) should be visible", explorePage.isExploreVisible());
+        Assert.assertTrue("Map should be the default view on entering Explore", explorePage.isMapViewActive());
+    }
+
+    @Test
     public void TC066_Verify_Toggle_To_List_View() {
         HomePage homePage = new HomePage(driver);
         ExplorePage explorePage = new ExplorePage(driver);
@@ -64,6 +66,92 @@ public class ExploreTest extends BaseTest {
 
         explorePage.switchToListView();
         Assert.assertTrue("List content should load after switching to List view", explorePage.waitForListContent());
+    }
+
+    @Test
+    public void TC067_Verify_Toggle_Back_To_Map_View() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilLoaded();
+
+        explorePage.switchToListView();
+        explorePage.waitForListContent();
+
+        explorePage.switchToMapView();
+        Assert.assertTrue("Map view should be active again after toggling back", explorePage.isMapViewActive());
+    }
+
+    /** iOS copy is "No matches found" (Android: "No locations found"); both hang off
+     * explore.location.empty, so the assertion is identifier-based and reads the same. */
+    @Test
+    public void TC069_Verify_Invalid_Location_Search_Shows_No_Locations_Found() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilLoaded();
+
+        // Android skips here: its build renders no location chip. iOS's locationInfoPill is
+        // in the tree on the dev build, so an absent chip is a real failure, not a skip.
+        Assert.assertTrue("Change-location chip should be visible on Explore",
+                explorePage.isLocationChipVisible());
+        explorePage.openChangeLocationDialog();
+        Assert.assertTrue("Change location dialog should be visible", explorePage.isChangeLocationDialogVisible());
+
+        Assert.assertTrue("Nonsense query should be accepted by the field",
+                explorePage.searchLocation("zzxxqqinvalidplace123"));
+        explorePage.submitSearch();
+
+        Assert.assertTrue("'No matches found' should be shown for an invalid query",
+                explorePage.isNoLocationsFoundVisible());
+    }
+
+
+    @Test
+    public void TC071_Verify_Temple_Search_Field_Accepts_Input() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilLoaded();
+
+        Assert.assertTrue("Temple search field should accept a query", explorePage.searchTemple("Ganesha"));
+
+        // Cleanup: leave the search field empty so later tests see the default Map view.
+        explorePage.clearTempleSearch();
+    }
+
+    @Test
+    public void TC072_Verify_List_Item_Navigates_To_Temple_Profile() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilLoaded();
+        explorePage.switchToListView();
+        Assert.assertTrue("List content should load", explorePage.waitForListContent());
+
+        Assert.assertTrue("A temple row should be tappable", explorePage.openFirstTempleFromList());
+        Assert.assertTrue("Tapping a temple row should open its profile", explorePage.isTempleProfileVisible());
+    }
+
+    @Test
+    public void TC073_Verify_Back_Navigation_From_Temple_Profile_Returns_To_Explore() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilLoaded();
+        explorePage.switchToListView();
+        explorePage.waitForListContent();
+        explorePage.openFirstTempleFromList();
+        Assert.assertTrue("Should have navigated to a temple profile", explorePage.isTempleProfileVisible());
+
+        Assert.assertTrue("Device back should be dispatchable from the temple profile", explorePage.navigateBack());
+        Assert.assertTrue("Explore screen should be visible again after navigating back",
+                explorePage.isExploreVisible() || retryBackToExplore(explorePage));
     }
 
     @Category(P0.class)
@@ -111,8 +199,8 @@ public class ExploreTest extends BaseTest {
 
         Assert.assertTrue("Devotees tab should be selectable",
                 explorePage.selectEntityTab("Devotees"));
-        Assert.assertFalse("Map/List toggle should not survive on the Devotees tab",
-                explorePage.isExploreVisible());
+        Assert.assertTrue("Map/List toggle should not survive on the Devotees tab",
+                explorePage.isMapListToggleAbsent());
 
         Assert.assertTrue("Temples tab should be selectable again",
                 explorePage.selectEntityTab("Temples"));

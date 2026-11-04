@@ -16,6 +16,39 @@ dependencies {
     testImplementation("org.seleniumhq.selenium:selenium-java:4.22.0")
 }
 
+// Simulator prerequisites for the Explore location tests (TC069/TC070). ExploreView only
+// renders the location pill once location resolution lands (shouldShowLocationPill), and a
+// freshly created simulator has neither the permission nor a fix - confirmed live: with
+// neither, Explore shows no pill at all and both tests fail on a screen that is otherwise
+// correct. Granting them here keeps the suite reproducible on any machine instead of
+// depending on whatever state the simulator happens to be in.
+//
+// Best-effort: a remote/BrowserStack run has no local simulator, and a missing simctl must
+// not fail the build - the two tests then fail on their own assertion, with the screen as
+// evidence, which is the honest outcome.
+fun Test.prepareSimulatorLocation() {
+    doFirst {
+        val udid = System.getProperty("appium.udid") ?: "429A2B19-3974-4483-A544-F425E0D4AC21"
+        val bundleId = System.getProperty("appium.bundleId") ?: "com.shriaikyam.ikyam.dev"
+        // Bengaluru: the test account's temples are seeded around it, so the map and the
+        // nearby list both have content to assert on.
+        // ProcessBuilder rather than Gradle's exec: Project.exec is gone in Gradle 9, and
+        // this needs no Gradle plumbing - it is two fire-and-forget simctl calls.
+        listOf(
+            listOf("xcrun", "simctl", "privacy", udid, "grant", "location-always", bundleId),
+            listOf("xcrun", "simctl", "location", udid, "set", "12.9716,77.5946"),
+        ).forEach { command ->
+            runCatching {
+                ProcessBuilder(command)
+                    .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+                    .waitFor()
+            }
+        }
+    }
+}
+
 tasks.test {
     // 256m survived a 27-test smoke run but not the full suite: a 106-test run accumulates
     // page sources and per-test driver state until the forked JVM is killed. The 13 Oct full
@@ -57,6 +90,8 @@ tasks.test {
         binaryResultsDirectory.set(layout.buildDirectory.dir("$base/binary"))
     }
 
+    prepareSimulatorLocation()
+
     finalizedBy("regressionReport")
 }
 
@@ -78,6 +113,8 @@ tasks.register<Test>("p0Smoke") {
         "appium.serverUrl", "appium.udid").forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
+
+    prepareSimulatorLocation()
 }
 
 // Everything the P0 smoke gate does NOT cover - the 79 tests outside @Category(P0).
@@ -99,6 +136,8 @@ tasks.register<Test>("p1Rest") {
         "appium.serverUrl", "appium.udid").forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
+
+    prepareSimulatorLocation()
 }
 
 // One-command regression report: parses every TEST-*.xml JUnit result produced by the
