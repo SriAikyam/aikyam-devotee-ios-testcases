@@ -43,6 +43,13 @@ public abstract class BasePage {
         return AppiumBy.accessibilityId(identifier);
     }
 
+    /** The identifier, or - on an app build that does not set it yet - the visible
+     * English label, the way the Android suite matches its unlabelled Compose nodes. */
+    public static By idOrLabel(String identifier, String label) {
+        return AppiumBy.iOSNsPredicateString(
+                "name == " + predicateLiteral(identifier) + " OR label == " + predicateLiteral(label));
+    }
+
     protected By textContains(String value) {
         String v = predicateLiteral(value);
         return AppiumBy.iOSNsPredicateString(
@@ -319,7 +326,7 @@ public abstract class BasePage {
                 }
             }
         }
-        if (!isDisplayedNow(driver, "tab.home")) {
+        if (driver.findElements(idOrLabel("tab.home", "Home")).isEmpty()) {
             Dimension size = driver.manage().window().getSize();
             swipe(driver, size.getWidth() / 2, (int) (size.getHeight() * 0.25),
                     (int) (size.getHeight() * 0.90));

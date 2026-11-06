@@ -20,7 +20,7 @@ public class MediaPage extends BasePage {
     private final By playAction = accessibilityId("Play");
     private final By muteAction = accessibilityId("Mute");
     private final By unmuteAction = accessibilityId("Unmute");
-    private final By homeBottomNav = id("tab.home");
+    private final By homeBottomNav = idOrLabel("tab.home", "Home");
     // FeedPostRow's engagement buttons are icon-only; until they carry identifiers, the
     // button label falls back to the asset name of its FeedTemplateIcon (plus any count).
     private final By saveAction = id("feed.post.save");
