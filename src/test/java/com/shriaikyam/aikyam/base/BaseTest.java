@@ -170,6 +170,16 @@ public abstract class BaseTest {
             if (udid != null && !udid.isBlank()) {
                 options.setUdid(udid);
             }
+
+            // A physical iPhone needs WebDriverAgent signed by our team; the default
+            // com.facebook.* bundle id cannot be provisioned under it. Simulators skip this.
+            String teamId = getProperty("appium.xcodeOrgId", null);
+            if (teamId != null && !teamId.isBlank()) {
+                options.amend("appium:xcodeOrgId", teamId)
+                        .amend("appium:xcodeSigningId", "Apple Development")
+                        .amend("appium:updatedWDABundleId",
+                                getProperty("appium.wdaBundleId", "com.shriaikyam.WebDriverAgentRunner"));
+            }
         }
 
         // Default path unchanged: driver is null here for every class that has not opted
@@ -277,9 +287,9 @@ public abstract class BaseTest {
     private static final int MAX_BACK_ATTEMPTS = 5;
 
     /** The Home tab of AikyamCustomTabBar (MainTabView), by its stable identifier. */
-    private static final By HOME_BOTTOM_NAV = AppiumBy.accessibilityId("tab.home");
+    private static final By HOME_BOTTOM_NAV = BasePage.idOrLabel("tab.home", "Home");
     /** Present only while the session is on the temple/priest account. */
-    private static final By TEMPLE_BOTTOM_NAV = AppiumBy.accessibilityId("tab.temple");
+    private static final By TEMPLE_BOTTOM_NAV = BasePage.idOrLabel("tab.temple", "Temple");
 
     /** Button labels of the iOS system permission alerts. autoAcceptAlerts normally
      * handles these; this is the fallback for one raised mid-reset. "Don't Allow" is
