@@ -1,3 +1,4 @@
+import java.util.concurrent.TimeUnit
 plugins {
     java
 }
@@ -30,8 +31,29 @@ fun Test.prepareSimulatorLocation() {
     doFirst {
         val udid = System.getProperty("appium.udid") ?: "429A2B19-3974-4483-A544-F425E0D4AC21"
         val bundleId = System.getProperty("appium.bundleId") ?: "com.shriaikyam.ikyam.dev"
+        // A simulator UDID is an uppercase hyphenated UUID; a real device's is not. simctl
+        // cannot grant permissions or set a location on hardware, so say so once rather than
+        // letting two silent failures leave the location tests without their prerequisite -
+        // on a device, location comes from the real GPS and has to be arranged physically.
+        // Skip for a remote grid too, not just a device: a BrowserStack run would otherwise
+        // shell out to whatever simulator this Mac happens to have under the default UDID
+        // (review finding 5).
+        val serverUrl = System.getProperty("appium.serverUrl") ?: ""
+        val isRemote = serverUrl.isNotEmpty() &&
+            !serverUrl.contains("127.0.0.1") && !serverUrl.contains("localhost")
+        val udidGiven = System.getProperty("appium.udid") != null
+        val isSimulator = Regex("^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$").matches(udid)
+        if (isRemote || !udidGiven || !isSimulator) {
+            logger.lifecycle(
+                "Not a local simulator ($udid): skipping simctl location setup. Tests that assert a " +
+                    "Bengaluru location (TC069/TC070) need the device to actually be there, " +
+                    "or a simulated location set from Xcode."
+            )
+            return@doFirst
+        }
         // Bengaluru: the test account's temples are seeded around it, so the map and the
-        // nearby list both have content to assert on.
+        // nearby list both have content to assert on. Applies to every test task, not only
+        // the location cases - TC070 is excluded from the suite (review nit).
         // ProcessBuilder rather than Gradle's exec: Project.exec is gone in Gradle 9, and
         // this needs no Gradle plumbing - it is two fire-and-forget simctl calls.
         listOf(
@@ -39,11 +61,17 @@ fun Test.prepareSimulatorLocation() {
             listOf("xcrun", "simctl", "location", udid, "set", "12.9716,77.5946"),
         ).forEach { command ->
             runCatching {
-                ProcessBuilder(command)
+                // waitFor with a bound: fire-and-forget let tests start before the grant
+                // and the location fix had landed - the very race this helper exists to
+                // close (review finding 4).
+                val process = ProcessBuilder(command)
                     .redirectErrorStream(true)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .start()
-                    .waitFor()
+                if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                    process.destroy()
+                    logger.lifecycle("simctl did not finish in 20s: ${command.joinToString(" ")}")
+                }
             }
         }
     }

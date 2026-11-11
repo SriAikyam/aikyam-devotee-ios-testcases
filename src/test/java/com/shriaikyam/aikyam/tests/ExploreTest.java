@@ -104,6 +104,14 @@ public class ExploreTest extends BaseTest {
                 explorePage.searchLocation("zzxxqqinvalidplace123"));
         explorePage.submitSearch();
 
+        // Wait for the search to actually resolve first. "No matches found" is also what
+        // the dialog shows in the gap BEFORE completions arrive, so asserting it straight
+        // after submitSearch() could pass before the query ran at all - and could not tell
+        // a genuinely invalid query from MapKit throttling, the same flakiness that got
+        // TC070 excluded (review finding 2).
+        Assert.assertTrue("The location search should resolve before it is judged",
+                explorePage.waitForLocationSearchToResolve());
+
         Assert.assertTrue("'No matches found' should be shown for an invalid query",
                 explorePage.isNoLocationsFoundVisible());
     }
@@ -117,10 +125,14 @@ public class ExploreTest extends BaseTest {
         homePage.tapExploreTab();
         explorePage.waitUntilLoaded();
 
-        Assert.assertTrue("Temple search field should accept a query", explorePage.searchTemple("Ganesha"));
-
-        // Cleanup: leave the search field empty so later tests see the default Map view.
-        explorePage.clearTempleSearch();
+        try {
+            Assert.assertTrue("Temple search field should accept a query",
+                    explorePage.searchTemple("Ganesha"));
+        } finally {
+            // In a finally: a failed assertion used to skip this and leak the query into
+            // every later test on this screen (review finding 8).
+            explorePage.clearTempleSearch();
+        }
     }
 
     @Test

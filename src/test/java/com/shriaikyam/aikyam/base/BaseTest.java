@@ -141,15 +141,13 @@ public abstract class BaseTest {
                 // the queries were not slow, they were queued behind a quiescence wait that
                 // never finished. Capping the wait makes the driver answer regardless.
                 .setWaitForIdleTimeout(Duration.ofSeconds(3))
-                .amend("appium:waitForQuiescence", false)
-                // Bound the snapshot WDA builds for every element lookup. The Explore Posts
-                // grid - a wall of autoplaying video tiles - keeps invalidating that
-                // snapshot, and an unbounded resolve ran 241s for ONE lookup. Past the
-                // Selenium client's own read timeout the client gives up first, which
-                // leaves the session wedged and poisons every test after it (TC173 did
-                // exactly that, twice). Capping it at 30s turns "poisons the run" into
-                // "this one lookup fails", which the test can report and recover from.
-                .amend("appium:customSnapshotTimeout", 30);
+                // The snapshot bound is NOT set here. The driver ignores
+                // appium:customSnapshotTimeout as a capability - the Appium log showed 241s
+                // lookups still getting through with it set - so it is applied through the
+                // settings endpoint in applySnapshotLimits() instead. Keeping a dead
+                // capability alongside the real one only suggested it did something
+                // (review finding 7).
+                .amend("appium:waitForQuiescence", false);
         String platformVersion = getProperty("appium.platformVersion", null);
         if (platformVersion != null) {
             options.setPlatformVersion(platformVersion);
@@ -319,7 +317,14 @@ public abstract class BaseTest {
      */
     private static void applySnapshotLimits(IOSDriver driver) {
         try {
-            driver.setSetting("customSnapshotTimeout", 20);
+            // 60s, not 20s. 20 was too tight: on the video-heavy feed WDA cannot resolve
+            // the snapshot in time and returns an EMPTY tree rather than an error, so every
+            // locator finds nothing - tab.home and even XCUIElementTypeNavigationBar come
+            // back as 0 matches on a screen that visibly has them. That reads as "element
+            // missing" and fails tests for a reason that is not theirs. 60s still sits well
+            // under the Selenium client's own read timeout (~180s), which is the limit that
+            // actually wedges WebDriverAgent.
+            driver.setSetting("customSnapshotTimeout", 60);
         } catch (RuntimeException ignored) {
             // Setting unsupported on this driver build; the capability remains as a hint.
         }

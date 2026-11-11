@@ -88,8 +88,32 @@ public class ExplorePage extends BasePage {
      *
      * isVisibleNow probes once with a 2s cap, which is what BasePage already recommends for
      * checks the caller will not retry. */
+    /** Absence, proved positively. `!isVisibleNow(...)` also returns true when the 2s probe
+     * simply expires or a snapshot lookup throws, so TC176 could pass on a timeout rather
+     * than on the toggle really being gone (review finding 6). Requiring a known non-Temples
+     * tab to be showing makes the assertion mean what it says. */
+    /** True once the location search has actually produced an answer - either suggestion
+     * rows, or an empty-state that has stopped changing. Without this a test can read the
+     * "No matches found" that the dialog shows while the query is still in flight (review
+     * finding 2). */
+    public boolean waitForLocationSearchToResolve() {
+        for (int poll = 0; poll < SUGGESTION_ARRIVAL_POLLS; poll++) {
+            if (!suggestionLabels().isEmpty()) {
+                return true;
+            }
+            pause(SUGGESTION_SETTLE_INTERVAL_MS);
+        }
+        // No rows ever arrived. Require the empty state to be steady across two reads, so a
+        // mid-flight placeholder is not mistaken for the result.
+        boolean first = isNoLocationsFoundVisible();
+        pause(SUGGESTION_SETTLE_INTERVAL_MS);
+        return first && isNoLocationsFoundVisible() && suggestionLabels().isEmpty();
+    }
+
     public boolean isMapListToggleAbsent() {
-        return !isVisibleNow(mapToggle, listToggle);
+        boolean onAnotherTab = isVisibleNow(
+                id("explore.tab.devotees"), id("explore.tab.posts"));
+        return onAnotherTab && !isVisibleNow(mapToggle, listToggle);
     }
 
     public boolean isListContentVisible() {
@@ -170,11 +194,12 @@ public class ExplorePage extends BasePage {
     public boolean selectLocationSuggestion(String cityText) {
         By suggestion = withIdLabelContaining("explore.location.suggestion", cityText);
         for (int attempt = 0; attempt < SUGGESTION_TAP_ATTEMPTS; attempt++) {
-            // An earlier attempt may have landed and only finished dismissing afterwards;
-            // without this the retry finds no rows to tap and reports a failure for a
-            // selection that actually worked.
+            // Only on a RETRY. An earlier attempt may have landed and finished dismissing
+            // afterwards, and without this the retry finds no rows and reports a failure
+            // for a selection that worked. On the FIRST pass a closed dialog means it
+            // never opened, which is a failure, not a success (review finding 3).
             if (!isChangeLocationDialogVisible()) {
-                return true;
+                return attempt > 0;
             }
             waitForSuggestionsToSettle();
             List<WebElement> rows = visibleElements(suggestion);
