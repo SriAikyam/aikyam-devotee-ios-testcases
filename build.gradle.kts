@@ -80,7 +80,14 @@ tasks.register<Test>("p0Smoke") {
     }
 }
 
-// Everything the P0 smoke gate does NOT cover - the 79 tests outside @Category(P0).
+// Everything the P0 smoke gate does NOT cover - every test outside @Category(P0).
+// Deliberately not a hardcoded count: the previous "79" went stale as cases were added
+// and quarantined (review finding 4).
+//
+// Note for the smoke gate: three @Category(P0) cases are currently @Ignore'd - AppsTest
+// TC081, CommentsJourneyTest TC190 and MusicTest TC144 - so the gate is three cases
+// narrower than the P0 annotations suggest. Each carries its reason; re-enabling is a
+// one-line change.
 // Exists because "run the rest" was otherwise only reachable by running all 106 and
 // re-paying the ~14 min the gate already proved green. Same device/Appium properties as
 // `test`, and it writes to its own results directory so a p1Rest run never overwrites a

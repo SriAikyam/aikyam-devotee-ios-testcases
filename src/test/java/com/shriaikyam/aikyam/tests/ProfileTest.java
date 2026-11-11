@@ -9,6 +9,8 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import com.shriaikyam.aikyam.categories.P0;
 import org.junit.runners.MethodSorters;
+import org.junit.Assume;
+import com.shriaikyam.aikyam.utils.DeviceControl;
 
 // Four cases here mutate the same profile (name, username, bio, gender) and one opens the
 // Delete Account dialog, but ordering was left to JUnit's hash-based default - the same
@@ -41,6 +43,7 @@ public class ProfileTest extends BaseTest {
      * flipped makes its own next run start from a different state. */
     @Test
     public void TC120_Verify_Profile_Edit_Gender_Selection_Persists() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         ProfilePage profilePage = new ProfilePage(driver);
 
         Assert.assertTrue("Profile should open", profilePage.openProfile());
@@ -67,6 +70,7 @@ public class ProfileTest extends BaseTest {
 
     @Test
     public void TC119_Verify_Profile_Edit_Bio_Field() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         ProfilePage profilePage = new ProfilePage(driver);
         String bio = "QA bio " + System.currentTimeMillis();
 
@@ -84,6 +88,7 @@ public class ProfileTest extends BaseTest {
      * it actually shows the profile's real info, not just that the tab label exists. */
     @Test
     public void TC121_Verify_About_Tab_Shows_Profile_Info() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         ProfilePage profilePage = new ProfilePage(driver);
 
         Assert.assertTrue("Profile should open", profilePage.openProfile());
@@ -107,6 +112,7 @@ public class ProfileTest extends BaseTest {
      * to Screen.UserProfile with your own userId), which carries a real Share action. */
     @Test
     public void TC118_Verify_Share_Profile_Opens_Native_Share_Sheet() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SHARE_SHEET, DeviceControl.isSimulator());
         ProfilePage profilePage = new ProfilePage(driver);
 
         Assert.assertTrue("Settings hub should open", profilePage.openSettingsHub());

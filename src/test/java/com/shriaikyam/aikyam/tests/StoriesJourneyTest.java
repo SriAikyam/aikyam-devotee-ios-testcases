@@ -12,6 +12,8 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import org.junit.Assume;
+import com.shriaikyam.aikyam.utils.DeviceControl;
 
 /**
  * Feed circle strip journeys. FINDING: in this build a person circle does not open a status
@@ -53,6 +55,7 @@ public class StoriesJourneyTest extends BaseTest {
 
     @Test
     public void TC250_Verify_Tapping_A_Person_Circle_Scopes_Feed_To_That_Person_And_Opens_No_Viewer() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         String name = circles().get(0);
         Assert.assertTrue("Circle should be tappable: " + name, strip.tapCircle(name));
 
@@ -66,6 +69,7 @@ public class StoriesJourneyTest extends BaseTest {
 
     @Test
     public void TC251_Verify_Switching_Between_Circles_Changes_The_Scoped_Author() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         List<String> names = circles();
         Assert.assertTrue("Need two person circles in the strip, saw " + names, names.size() >= 2);
         String first = names.get(0);
@@ -82,6 +86,7 @@ public class StoriesJourneyTest extends BaseTest {
 
     @Test
     public void TC252_Verify_Selecting_A_Circle_Clears_Its_Unseen_Dot_And_It_Stays_Cleared() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         String name = null;
         for (String candidate : circles()) {
             if (strip.hasUnseenDot(candidate)) {
@@ -106,6 +111,7 @@ public class StoriesJourneyTest extends BaseTest {
 
     @Test
     public void TC253_Verify_Scroll_Right_Reveals_Further_Circles() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         Set<String> before = strip.visibleCircleNames();
         Assert.assertTrue("Strip should offer a Scroll right control", strip.tapScrollRight());
         Assert.assertTrue("Scrolling right should change the visible circles, still " + before,

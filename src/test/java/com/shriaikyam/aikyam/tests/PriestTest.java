@@ -9,6 +9,8 @@ import org.junit.Assert;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
+import org.junit.Assume;
+import com.shriaikyam.aikyam.utils.DeviceControl;
 
 /**
  * The priest/temple role, reached from this same devotee login via account-switching
@@ -39,6 +41,7 @@ public class PriestTest extends BaseTest {
      * described this contract; only the tests enforcing it were absent. */
     @Test
     public void TC161_Verify_Switch_To_Temple_Account() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         ProfilePage profilePage = new ProfilePage(driver);
         SettingsPage settingsPage = new SettingsPage(driver);
         PriestPage priestPage = new PriestPage(driver);
@@ -65,6 +68,7 @@ public class PriestTest extends BaseTest {
 
     @Test
     public void TC166_Verify_Priest_Apps_Tab_Shows_Coming_Soon() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         PriestPage priestPage = new PriestPage(driver);
         priestPage.tapAppsTab();
 
@@ -75,6 +79,7 @@ public class PriestTest extends BaseTest {
      * Orders tab). */
     @Test
     public void TC168_Verify_Priest_Settings_Order_History_Does_Not_Show_Session_Error() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         ProfilePage profilePage = new ProfilePage(driver);
         PriestSettingsPage priestSettingsPage = new PriestSettingsPage(driver);
 
@@ -92,6 +97,7 @@ public class PriestTest extends BaseTest {
      * on the temple account and poisons everything that follows it. */
     @Test
     public void TC270_Verify_Switch_Back_To_Personal_Account() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
         ProfilePage profilePage = new ProfilePage(driver);
         SettingsPage settingsPage = new SettingsPage(driver);
 
