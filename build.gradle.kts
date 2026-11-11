@@ -30,24 +30,39 @@ dependencies {
 /** The booted simulator's UDID, or null when none is booted / simctl is unavailable.
  * Replaces a hardcoded fallback UUID, which was one machine's simulator: anywhere else it
  * silently pointed simctl at a device that does not exist (Vinod's review). */
-fun bootedSimulatorUdid(): String? = runCatching {
+fun bootedSimulatorUdids(): List<String> = runCatching {
     val process = ProcessBuilder("xcrun", "simctl", "list", "devices", "booted", "-j")
-        .redirectErrorStream(false)
+        // stderr DISCARDed rather than merged and left undrained: a noisy simctl could
+        // otherwise fill the pipe buffer and block us here (review finding 3).
+        .redirectError(ProcessBuilder.Redirect.DISCARD)
         .start()
     if (!process.waitFor(20, TimeUnit.SECONDS)) {
         process.destroy()
-        return@runCatching null
+        return@runCatching emptyList()
     }
     Regex("\"udid\"\\s*:\\s*\"([0-9A-F-]{36})\"")
-        .find(process.inputStream.bufferedReader().readText())
-        ?.groupValues?.get(1)
-}.getOrNull()
+        .findAll(process.inputStream.bufferedReader().readText())
+        .map { it.groupValues[1] }
+        .toList()
+}.getOrElse { emptyList() }
 
 fun Test.prepareSimulatorLocation() {
     doFirst {
-        // No hardcoded fallback: either the run named a UDID, or we ask simctl which
-        // simulator is actually booted on THIS machine.
-        val udid = System.getProperty("appium.udid") ?: bootedSimulatorUdid()
+        // No hardcoded fallback. An explicit -Dappium.udid always wins, so the grant cannot
+        // land on a different simulator than Appium drives. Otherwise ask simctl what is
+        // booted here - and if more than one is, skip rather than guess which Appium picks
+        // (review finding 3).
+        val explicitUdid = System.getProperty("appium.udid")
+        val booted = if (explicitUdid != null) emptyList() else bootedSimulatorUdids()
+        if (explicitUdid == null && booted.size > 1) {
+            logger.lifecycle(
+                "${booted.size} simulators are booted and no -Dappium.udid was given, so a " +
+                    "location grant could land on the wrong one: skipping simctl location " +
+                    "setup. Pass -Dappium.udid to choose."
+            )
+            return@doFirst
+        }
+        val udid = explicitUdid ?: booted.firstOrNull()
         val bundleId = System.getProperty("appium.bundleId") ?: "com.shriaikyam.ikyam.dev"
         // A simulator UDID is an uppercase hyphenated UUID; a real device's is not. simctl
         // cannot grant permissions or set a location on hardware, so say so once rather than
@@ -73,6 +88,10 @@ fun Test.prepareSimulatorLocation() {
             )
             return@doFirst
         }
+        logger.lifecycle(
+            "simctl location setup targeting $udid " +
+                "(${if (explicitUdid != null) "from -Dappium.udid" else "the one booted simulator"})."
+        )
         // Bengaluru: the test account's temples are seeded around it, so the map and the
         // nearby list both have content to assert on. Applies to every test task, not only
         // the location cases - TC070 is excluded from the suite (review nit).
@@ -218,6 +237,7 @@ tasks.register("regressionReport") {
         var passed = 0
         var failed = 0
         var skipped = 0
+        val skippedCases = mutableListOf<String>()
 
         val html = StringBuilder()
         html.append("<!doctype html>\n<html><head><meta charset=\"utf-8\">")
@@ -265,6 +285,12 @@ tasks.register("regressionReport") {
                     message = (errorNodes.item(0) as org.w3c.dom.Element).getAttribute("message")
                 } else if (skippedNodes.length > 0) {
                     status = "SKIPPED"
+                    // Capture the reason, not just the count. A skip is a case that did NOT
+                    // run, and "chip absent" is also what a real regression looks like - so
+                    // a silent skip can hide one for weeks (review finding 2).
+                    message = (skippedNodes.item(0) as org.w3c.dom.Element).getAttribute("message")
+                    skippedCases.add("$simpleClassName.$name - " +
+                        (if (message.isBlank()) "(no reason given)" else message))
                 }
 
                 total += 1
@@ -318,5 +344,11 @@ tasks.register("regressionReport") {
         outFile.writeText(finalHtml)
         println("Regression summary: ${outFile.absolutePath}")
         println("Total: $total  Passed: $passed  Failed: $failed  Skipped: $skipped")
+        if (skippedCases.isNotEmpty()) {
+            // Printed, not just counted: a skipped case did not run, and the reason is the
+            // only way to tell "precondition absent on this host" from a real regression.
+            println("Skipped (${skippedCases.size}) - each with its stated reason:")
+            skippedCases.forEach { println("  - $it") }
+        }
     }
 }

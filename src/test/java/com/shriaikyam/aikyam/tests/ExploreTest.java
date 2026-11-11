@@ -163,4 +163,53 @@ public class ExploreTest extends BaseTest {
                 explorePage.isDevoteeSearchVisible()
         );
     }
+
+    @Test
+    public void TC173_Verify_Posts_Tab_Shows_Post_Search() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilTabStripLoaded();
+
+        Assert.assertTrue("Posts tab should be selectable",
+                explorePage.selectEntityTab("Posts"));
+        Assert.assertTrue(
+                "Posts tab should show its own post search field",
+                explorePage.isPostSearchVisible()
+        );
+    }
+
+    /** Switching away and back must restore the Temples tab's own surface - the temple
+     * search field and the Map/List toggle, neither of which exists on the other tabs. */
+    @Test
+    public void TC176_Verify_Returning_To_Temples_Restores_Map_List_Toggle() {
+        HomePage homePage = new HomePage(driver);
+        ExplorePage explorePage = new ExplorePage(driver);
+
+        homePage.tapExploreTab();
+        explorePage.waitUntilTabStripLoaded();
+
+        Assert.assertTrue("Devotees tab should be selectable",
+                explorePage.selectEntityTab("Devotees"));
+        Assert.assertFalse("Map/List toggle should not survive on the Devotees tab",
+                explorePage.isExploreVisible());
+
+        Assert.assertTrue("Temples tab should be selectable again",
+                explorePage.selectEntityTab("Temples"));
+        Assert.assertTrue("Temple search should be back on the Temples tab",
+                explorePage.isTempleSearchVisible());
+        Assert.assertTrue("Map/List toggle should be back on the Temples tab",
+                explorePage.isExploreVisible());
+    }
+
+    private boolean retryBackToExplore(ExplorePage explorePage) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            explorePage.navigateBack();
+            if (explorePage.isExploreVisible()) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
