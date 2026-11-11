@@ -78,6 +78,11 @@ fun Test.prepareSimulatorLocation() {
         // gets its grant on a plain `./gradlew test`. An earlier version keyed this on
         // "was -Dappium.udid passed?", which made the fallback dead code and silently
         // skipped the grant on the default simulator (review finding 2 on re-review).
+        // SECOND COPY of this rule. The other is DeviceControl.isSimulator() in
+        // src/test/java/com/shriaikyam/aikyam/utils/ (added by the quarantine PR), which the
+        // Assume-guarded cases use. Gradle cannot see the test classpath at configuration
+        // time, so the duplication is deliberate - but a change to the UUID shape has to be
+        // made in BOTH places, or one side silently disagrees (review).
         val isSimulator = udid != null &&
             Regex("^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$").matches(udid)
         if (isRemote || !isSimulator) {
