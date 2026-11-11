@@ -45,6 +45,7 @@ public class ExploreTest extends BaseTest {
         }
     }
 
+    @Category(P0.class)
     @Test
     public void TC065_Verify_Explore_Screen_Opens_With_Map_Default() {
         HomePage homePage = new HomePage(driver);
@@ -69,6 +70,7 @@ public class ExploreTest extends BaseTest {
         Assert.assertTrue("List content should load after switching to List view", explorePage.waitForListContent());
     }
 
+    // Deliberately not @Category(P0): it is the return half of TC065's toggle, so TC065 failing already catches a broken toggle.
     @Test
     public void TC067_Verify_Toggle_Back_To_Map_View() {
         HomePage homePage = new HomePage(driver);
@@ -86,6 +88,7 @@ public class ExploreTest extends BaseTest {
 
     /** iOS copy is "No matches found" (Android: "No locations found"); both hang off
      * explore.location.empty, so the assertion is identifier-based and reads the same. */
+    // Deliberately not @Category(P0): it skips on a device - the location it needs can only be seeded on a simulator - and a gate case must run everywhere.
     @Test
     public void TC069_Verify_Invalid_Location_Search_Shows_No_Locations_Found() {
         HomePage homePage = new HomePage(driver);
@@ -129,6 +132,7 @@ public class ExploreTest extends BaseTest {
                 explorePage.isNoLocationsFoundVisible());
     }
 
+    // Deliberately not @Category(P0): it only types into a field; nothing downstream depends on it.
     @Test
     public void TC071_Verify_Temple_Search_Field_Accepts_Input() {
         HomePage homePage = new HomePage(driver);

@@ -245,7 +245,16 @@ public class ExplorePage extends BasePage {
         List<String> labels = new ArrayList<>();
         for (WebElement row : visibleElements(id("explore.location.suggestion"))) {
             try {
-                labels.add(String.valueOf(row.getAttribute("label")));
+                // NOT String.valueOf: that turns a null label into the literal "null", a
+                // non-empty string. The list would then look non-empty for rows that carry
+                // no label at all, so waitForLocationSearchToResolve() would report the
+                // search resolved on its first poll, and waitForSuggestionsToSettle() would
+                // compare ["null"] with ["null"] and call the list settled - a false pass
+                // on a query that had not run yet.
+                String label = row.getAttribute("label");
+                if (label != null && !label.isEmpty()) {
+                    labels.add(label);
+                }
             } catch (RuntimeException ignored) {
                 // Row went away mid-read: that is itself movement, so leave it out and let
                 // the next poll compare against a list that no longer contains it.
