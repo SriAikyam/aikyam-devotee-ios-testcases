@@ -19,27 +19,23 @@ import org.junit.Ignore;
  * their own change in a finally block so the shared dev account is left as found.
  */
 /*
- * QUARANTINED: the feed does not reach its loaded state reliably on the physical test
- * device, so the shared @Before times out and most cases never reach their body.
+ * Quarantined case by case, not as a class - TC183 passes and must keep running.
  *
- * Measured on the REQUIRED app build (the earlier numbers were taken against a build with
- * no accessibility identifiers and were discarded):
+ * Measured on a device with the required app build VERIFIED immediately before the run
+ * (all five readiness locators resolving, 27 post rows). Earlier measurements of this
+ * class are discarded: they ran against a build exposing no accessibility identifiers,
+ * where every case died in the shared @Before and the class looked uniformly broken.
  *
- *   1 passed, 6 failed, 34m 56s
+ *   TC183                  passes
+ *   TC182, TC181, TC186    reach their assertion and fail there - real failures
+ *   TC180, TC184, TC185    WebDriver session/proxy errors, cause NOT established
  *
- * All six failures are a 30s TimeoutException from returnToFeed() - tapHomeTab() then
- * FeedPage.waitUntilLoaded(). That one case passes is the important detail: the setUp is
- * not broken, it is slow and intermittent. The feed sometimes loads inside 30s and usually
- * does not, on a screen that autoplays video.
- *
- * So this is not a defect in the seven case bodies, and re-enabling them one at a time
- * will not help. What needs looking at is how long the feed takes to settle on hardware,
- * and whether waitUntilLoaded is waiting for something that only appears once every video
- * tile has resolved.
+ * The last three are quarantined on an unproven cause. The test device's app build was
+ * being replaced repeatedly during this work - three times in one afternoon, twice
+ * mid-verification - so a session error here is as likely to be that as a defect. They
+ * need re-measuring on a build verified before AND after the run before anyone trusts a
+ * reason for them.
  */
-@Ignore("Feed does not load reliably on the device: 1 passed / 6 failed on the required "
-        + "app build, the six timing out after 30s in the shared @Before. Intermittent and "
-        + "slow, not a defect in the case bodies.")
 public class FeedJourneyTest extends BaseTest {
 
     private static final String SAVED_POSTS_EMPTY = "No saved posts";
@@ -59,6 +55,9 @@ public class FeedJourneyTest extends BaseTest {
      * effect is the post appearing under Settings > Saved Posts. */
     @Category(P0.class)
     @Test
+    @Ignore("Failed with a WebDriver session/proxy error, not an assertion - cause NOT "
+            + "established. The device app build was unstable during measurement; "
+            + "re-measure on a verified build before trusting any reason.")
     public void TC180_Verify_Saved_Post_Appears_In_Saved_Posts_And_Unsave_Removes_It() {
         FeedPage feedPage = new FeedPage(driver);
 
@@ -88,6 +87,8 @@ public class FeedJourneyTest extends BaseTest {
 
     @Category(P0.class)
     @Test
+    @Ignore("Re-tapping Namaskara does not restore the original count - reaches the "
+            + "assertion and fails there. Real failure, not a harness problem.")
     public void TC181_Verify_Namaskara_Then_Unnamaskara_Restores_The_Counts() {
         FeedPage feedPage = new FeedPage(driver);
         String before = feedPage.captureNumericCountsSignature();
@@ -114,6 +115,8 @@ public class FeedJourneyTest extends BaseTest {
 
     @Category(P0.class)
     @Test
+    @Ignore("Native share sheet does not open from the feed on the device - reaches the "
+            + "assertion and fails there. Real failure, not a harness problem.")
     public void TC182_Verify_Share_Opens_Native_Share_Sheet_And_Returns_To_Feed() {
         FeedPage feedPage = new FeedPage(driver);
         ProfilePage profilePage = new ProfilePage(driver);
@@ -140,6 +143,9 @@ public class FeedJourneyTest extends BaseTest {
 
     /** Needs a multi-image post near the top of the feed - data-dependent. */
     @Test
+    @Ignore("Failed with a WebDriver session/proxy error, not an assertion - cause NOT "
+            + "established. The device app build was unstable during measurement; "
+            + "re-measure on a verified build before trusting any reason.")
     public void TC184_Verify_Swiping_A_Multi_Image_Post_Advances_Its_Counter() {
         FeedPage feedPage = new FeedPage(driver);
 
@@ -154,6 +160,9 @@ public class FeedJourneyTest extends BaseTest {
      * is no "Following" label on the post), so the follow state is proved on the temple's own
      * page, and the test unfollows there so the account is left as found. */
     @Test
+    @Ignore("Failed with a WebDriver session/proxy error, not an assertion - cause NOT "
+            + "established. The device app build was unstable during measurement; "
+            + "re-measure on a verified build before trusting any reason.")
     public void TC185_Verify_Follow_Then_Unfollow_A_Temple_From_A_Post() {
         FeedPage feedPage = new FeedPage(driver);
 
@@ -188,6 +197,8 @@ public class FeedJourneyTest extends BaseTest {
 
     @Category(P0.class)
     @Test
+    @Ignore("Temples filter does not change which post is first - reaches the assertion "
+            + "and fails there. Real failure, not a harness problem.")
     public void TC186_Verify_Temples_Filter_Changes_The_Feed_And_All_Posts_Restores_It() {
         FeedPage feedPage = new FeedPage(driver);
 
