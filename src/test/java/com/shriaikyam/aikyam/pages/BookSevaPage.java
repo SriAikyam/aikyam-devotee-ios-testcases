@@ -23,7 +23,7 @@ import java.util.List;
 public class BookSevaPage extends BasePage {
 
     // iOS has no Sevas tab (Book Seva is on hold); same id HomePage keeps for it.
-    private final By sevasTabAction = id("tab.sevas");
+    private final By sevasTabAction = idOrLabel("tab.sevas", "Sevas");
     private final By sevaCardBookAction = id("sevas.card.book");
     private final By sevaCardDetailsAction = id("sevas.card.details");
     private final By bookThisSevaAction = id("sevas.catalog.book");

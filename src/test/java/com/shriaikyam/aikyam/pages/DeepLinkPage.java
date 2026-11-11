@@ -121,7 +121,7 @@ public class DeepLinkPage extends BasePage {
             if (isHomeFeedShown(Duration.ofSeconds(1))) {
                 return;
             }
-            if (isShown(id("tab.home"))) {
+            if (isShown(idOrLabel("tab.home", "Home"))) {
                 new HomePage(driver).tapHomeTab();
                 if (isHomeFeedShown(Duration.ofSeconds(3))) {
                     return;

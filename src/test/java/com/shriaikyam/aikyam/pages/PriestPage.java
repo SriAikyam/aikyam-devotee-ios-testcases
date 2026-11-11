@@ -20,11 +20,13 @@ public class PriestPage extends BasePage {
 
     // MainTabView swaps the tab bar's identifiers in temple context. The priest "Events"
     // tab is L10n.Tabs.schedules (English label "Events"), hence tab.schedules.
-    private final By temple = id("tab.temple");
-    private final By orders = id("tab.orders");
-    private final By events = id("tab.schedules");
-    private final By services = id("tab.services");
-    private final By apps = id("tab.apps");
+    private final By temple = idOrLabel("tab.temple", "Temple");
+    private final By orders = idOrLabel("tab.orders", "Orders");
+    // en.lproj: "tab_schedules" = "Events". The fallback label must be the DISPLAY text,
+    // not the key's name, or the label branch can never match (review finding 1).
+    private final By events = idOrLabel("tab.schedules", "Events");
+    private final By services = idOrLabel("tab.services", "Services");
+    private final By apps = idOrLabel("tab.apps", "Apps");
 
     // TempleAccountHomeView's About / Posts / Live segment buttons. Each button's label
     // combines its SF Symbol and title, so match on the trailing title; "Posts" also

@@ -12,20 +12,20 @@ public class HomePage extends BasePage {
 
     // AikyamCustomTabBar buttons carry locale-independent identifiers (set in
     // MainTabView.tabBarItems); their labels are localized.
-    private final By homeBottomNav = id("tab.home");
+    private final By homeBottomNav = idOrLabel("tab.home", "Home");
     // iOS has no Sevas tab: Book Seva is on hold on both platforms. Kept so the
     // on-hold API matches Android; nothing in the active suite asserts it is visible.
-    private final By sevasBottomNav = id("tab.sevas");
-    private final By exploreBottomNav = id("tab.explore");
-    private final By musicBottomNav = id("tab.music");
-    private final By appsBottomNav = id("tab.apps");
+    private final By sevasBottomNav = idOrLabel("tab.sevas", "Sevas");
+    private final By exploreBottomNav = idOrLabel("tab.explore", "Explore");
+    private final By musicBottomNav = idOrLabel("tab.music", "Music");
+    private final By appsBottomNav = idOrLabel("tab.apps", "Apps");
     // Confirmed live: the bottom nav's fifth slot currently reads "Events", not
     // "Sevas" - Book Seva is on hold by a deliberate product decision (see
     // BookSevaTest's class-level @Ignore), and this is what occupies that slot in
     // its place today. Added alongside sevasBottomNav rather than replacing it, same
     // as the rest of this codebase keeps on-hold locators intact instead of deleting
     // them - re-enable is a one-line swap back if Sevas returns to this slot.
-    private final By eventsBottomNav = id("tab.events");
+    private final By eventsBottomNav = idOrLabel("tab.events", "Events");
 
     public HomePage(IOSDriver driver) {
         super(driver);

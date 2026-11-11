@@ -142,6 +142,8 @@ tasks.test {
         "appium.deviceName",
         "appium.serverUrl",
         "appium.udid",
+        "appium.xcodeOrgId",
+        "appium.wdaBundleId",
         "appium.bstackApp",
         "appium.osVersion",
         "appium.bstackProject",
@@ -184,7 +186,7 @@ tasks.register<Test>("p0Smoke") {
     maxHeapSize = "2g"
     jvmArgs("-XX:MaxMetaspaceSize=512m", "-XX:+HeapDumpOnOutOfMemoryError")
     listOf("appium.worker", "appium.bundleId", "appium.platformVersion", "appium.deviceName",
-        "appium.serverUrl", "appium.udid").forEach { key ->
+        "appium.serverUrl", "appium.udid", "appium.xcodeOrgId", "appium.wdaBundleId").forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
 
@@ -207,7 +209,7 @@ tasks.register<Test>("p1Rest") {
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/p1Rest"))
     reports.html.outputLocation.set(layout.buildDirectory.dir("reports/tests/p1Rest"))
     listOf("appium.worker", "appium.bundleId", "appium.platformVersion", "appium.deviceName",
-        "appium.serverUrl", "appium.udid").forEach { key ->
+        "appium.serverUrl", "appium.udid", "appium.xcodeOrgId", "appium.wdaBundleId").forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
 
