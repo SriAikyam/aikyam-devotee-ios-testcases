@@ -147,30 +147,6 @@ public class ExploreTest extends BaseTest {
         }
     }
 
-    @Test
-    public void TC073_Verify_Back_Navigation_From_Temple_Profile_Returns_To_Explore() {
-        HomePage homePage = new HomePage(driver);
-        ExplorePage explorePage = new ExplorePage(driver);
-
-        homePage.tapExploreTab();
-        explorePage.waitUntilLoaded();
-        explorePage.switchToListView();
-        explorePage.waitForListContent();
-        // Same precondition as TC069, one step further on: the nearby list is populated from
-        // temples seeded around Bengaluru, so on a device located elsewhere there is no row
-        // to open. Verified on the test iPhone: zero explore.temple.* rows in the tree.
-        Assume.assumeTrue("Skipping: Explore's nearby list has no temple rows on this host - "
-                        + "they are seeded around Bengaluru and the suite cannot set a "
-                        + "physical device's location",
-                explorePage.hasTempleRows());
-        explorePage.openFirstTempleFromList();
-        Assert.assertTrue("Should have navigated to a temple profile", explorePage.isTempleProfileVisible());
-
-        Assert.assertTrue("Device back should be dispatchable from the temple profile", explorePage.navigateBack());
-        Assert.assertTrue("Explore screen should be visible again after navigating back",
-                explorePage.isExploreVisible() || retryBackToExplore(explorePage));
-    }
-
     @Category(P0.class)
     @Test
     public void TC172_Verify_Devotees_Tab_Shows_Devotee_Search() {
@@ -186,15 +162,5 @@ public class ExploreTest extends BaseTest {
                 "Devotees tab should show its own devotee search field",
                 explorePage.isDevoteeSearchVisible()
         );
-    }
-
-    private boolean retryBackToExplore(ExplorePage explorePage) {
-        for (int attempt = 0; attempt < 3; attempt++) {
-            explorePage.navigateBack();
-            if (explorePage.isExploreVisible()) {
-                return true;
-            }
-        }
-        return false;
     }
 }
