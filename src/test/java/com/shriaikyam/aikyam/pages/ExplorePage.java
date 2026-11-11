@@ -100,6 +100,13 @@ public class ExplorePage extends BasePage {
         return first && isNoLocationsFoundVisible() && suggestionLabels().isEmpty();
     }
 
+    /** True when the nearby list actually has temple rows. The list renders from temples
+     * seeded around Bengaluru, so a host whose location is elsewhere shows none - that is a
+     * missing precondition, not a failure, and callers Assume on it. */
+    public boolean hasTempleRows() {
+        return isVisibleNow(templeRow);
+    }
+
     public boolean isListContentVisible() {
         return isAnyVisible(listLoading, listEmpty, listError, templeRow);
     }
