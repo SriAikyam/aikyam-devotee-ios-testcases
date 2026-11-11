@@ -147,7 +147,19 @@ public abstract class BaseTest {
                 // settings endpoint in applySnapshotLimits() instead. Keeping a dead
                 // capability alongside the real one only suggested it did something
                 // (review finding 7).
-                .amend("appium:waitForQuiescence", false);
+                // Quiescence off by default, overridable with -Dappium.waitForQuiescence=true.
+                //
+                // Vinod's review is right that this is a wide blast radius, and the escape
+                // hatch is here for that reason. It is not scoped to Explore because the
+                // screens that never quiesce are not only Explore's map: the feed autoplays
+                // video (FeedDisplayMedia/YouTubePlayerView) and the music player ticks a
+                // progress bar, so a quiescence wait on those screens never settles either -
+                // which is where the 241s lookups and the empty-tree failures were measured.
+                // setWaitForIdleTimeout(3s) above already bounds any wait that does happen,
+                // and every page object here waits explicitly rather than relying on the
+                // driver to decide the app has settled.
+                .amend("appium:waitForQuiescence",
+                        Boolean.parseBoolean(getProperty("appium.waitForQuiescence", "false")));
         String platformVersion = getProperty("appium.platformVersion", null);
         if (platformVersion != null) {
             options.setPlatformVersion(platformVersion);

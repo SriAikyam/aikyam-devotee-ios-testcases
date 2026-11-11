@@ -109,6 +109,11 @@ public class ExploreTest extends BaseTest {
         // after submitSearch() could pass before the query ran at all - and could not tell
         // a genuinely invalid query from MapKit throttling, the same flakiness that got
         // TC070 excluded (review finding 2).
+        // Two different waits, deliberately: this one answers "has the query produced a
+        // result yet?" and is the only guard on the INVALID-query path, where no row ever
+        // arrives. selectLocationSuggestion's own waitForSuggestionsToSettle() answers
+        // "has the list stopped reordering?" and only runs on the valid path. They are not
+        // redundant (Vinod's review).
         Assert.assertTrue("The location search should resolve before it is judged",
                 explorePage.waitForLocationSearchToResolve());
 

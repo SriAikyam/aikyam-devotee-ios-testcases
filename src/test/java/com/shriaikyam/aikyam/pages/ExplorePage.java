@@ -209,8 +209,8 @@ public class ExplorePage extends BasePage {
      * quarter of the way in keeps the point inside the text for every suggestion, the
      * one-line "Mumbai" included.
      *
-     * Worth reporting separately: the same dead zone applies to a real finger, so most of
-     * each suggestion row is untappable in the shipping UI. */
+     * Filed as SriAikyam/aikyam-devotee-ios#696 - the same dead zone applies to a real
+     * finger, so most of each suggestion row is untappable in the shipping UI. */
     private void tapSuggestionLabel(WebElement row) {
         Point location = row.getLocation();
         Dimension size = row.getSize();

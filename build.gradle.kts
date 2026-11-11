@@ -27,9 +27,27 @@ dependencies {
 // Best-effort: a remote/BrowserStack run has no local simulator, and a missing simctl must
 // not fail the build - the two tests then fail on their own assertion, with the screen as
 // evidence, which is the honest outcome.
+/** The booted simulator's UDID, or null when none is booted / simctl is unavailable.
+ * Replaces a hardcoded fallback UUID, which was one machine's simulator: anywhere else it
+ * silently pointed simctl at a device that does not exist (Vinod's review). */
+fun bootedSimulatorUdid(): String? = runCatching {
+    val process = ProcessBuilder("xcrun", "simctl", "list", "devices", "booted", "-j")
+        .redirectErrorStream(false)
+        .start()
+    if (!process.waitFor(20, TimeUnit.SECONDS)) {
+        process.destroy()
+        return@runCatching null
+    }
+    Regex("\"udid\"\\s*:\\s*\"([0-9A-F-]{36})\"")
+        .find(process.inputStream.bufferedReader().readText())
+        ?.groupValues?.get(1)
+}.getOrNull()
+
 fun Test.prepareSimulatorLocation() {
     doFirst {
-        val udid = System.getProperty("appium.udid") ?: "429A2B19-3974-4483-A544-F425E0D4AC21"
+        // No hardcoded fallback: either the run named a UDID, or we ask simctl which
+        // simulator is actually booted on THIS machine.
+        val udid = System.getProperty("appium.udid") ?: bootedSimulatorUdid()
         val bundleId = System.getProperty("appium.bundleId") ?: "com.shriaikyam.ikyam.dev"
         // A simulator UDID is an uppercase hyphenated UUID; a real device's is not. simctl
         // cannot grant permissions or set a location on hardware, so say so once rather than
@@ -45,10 +63,11 @@ fun Test.prepareSimulatorLocation() {
         // gets its grant on a plain `./gradlew test`. An earlier version keyed this on
         // "was -Dappium.udid passed?", which made the fallback dead code and silently
         // skipped the grant on the default simulator (review finding 2 on re-review).
-        val isSimulator = Regex("^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$").matches(udid)
+        val isSimulator = udid != null &&
+            Regex("^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$").matches(udid)
         if (isRemote || !isSimulator) {
             logger.lifecycle(
-                "Not a local simulator ($udid): skipping simctl location setup. Tests that assert a " +
+                "Not a local simulator (${udid ?: "no booted simulator found"}): skipping simctl location setup. Tests that assert a " +
                     "Bengaluru location (TC069/TC070) need the device to actually be there, " +
                     "or a simulated location set from Xcode."
             )
