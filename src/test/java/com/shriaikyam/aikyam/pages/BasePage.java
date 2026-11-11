@@ -46,6 +46,17 @@ public abstract class BasePage {
     /** The identifier, or - on an app build that does not set it yet - the visible
      * English label, the way the Android suite matches its unlabelled Compose nodes.
      *
+     * Static, unlike the instance {@link #id(String)}, because the sentinels that use it
+     * (HOME_BOTTOM_NAV / TEMPLE_BOTTOM_NAV in BaseTest) are static fields and cannot call
+     * an instance method. Build fallback locators with this rather than reaching for
+     * AppiumBy.iOSNsPredicateString directly, so the scoping below stays in one place.
+     *
+     * @implNote {@code label} is assumed to be the ENGLISH display string. The app ships
+     * Kannada, Hindi, Tamil and Telugu; on a device set to any of those the label branch
+     * will not match and only the identifier branch can succeed. That is the intended
+     * trade-off - the fallback exists for app builds missing identifiers, not for
+     * localised runs - but it is why a label-only build must be tested in English.
+     *
      * The label branch is scoped to BUTTONS. Unscoped, `label == "Home"` is satisfied by a
      * screen title, a card or any other text on screen, which matters because these
      * predicates back the HOME_BOTTOM_NAV and TEMPLE_BOTTOM_NAV sentinels: a false positive
