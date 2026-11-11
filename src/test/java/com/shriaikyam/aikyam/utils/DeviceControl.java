@@ -9,11 +9,6 @@ package com.shriaikyam.aikyam.utils;
  */
 public final class DeviceControl {
 
-    public static final String SIMULATOR_ONLY_PERMISSIONS =
-            "Granting or resetting a permission is simulator-only: the XCUITest driver "
-                    + "implements it through simctl privacy, which cannot reach a physical "
-                    + "device. Runs on a simulator or BrowserStack only.";
-
     public static final String SIMULATOR_ONLY_SHARE_SHEET =
             "WebDriverAgent cannot see the iOS share sheet on a physical device - it is a "
                     + "separate out-of-process presentation the device's WDA build does not "
@@ -25,7 +20,11 @@ public final class DeviceControl {
                     + "real account where that data does not exist. Runs on a simulator only.";
 
     /** True when this run targets a simulator. A simulator udid is an uppercase hyphenated
-     * UUID; a physical device's is not. No udid at all means the default local simulator. */
+     * UUID; a physical device's is not. No udid at all means the default local simulator.
+     *
+     * NOTE: build.gradle.kts carries the same UUID shape for its simctl guard. Two copies,
+     * deliberately - Gradle cannot see the test classpath at configuration time - so if the
+     * rule ever changes, change it in both (flagged in review so they do not drift). */
     public static boolean isSimulator() {
         String udid = System.getProperty("appium.udid");
         return udid == null || udid.isBlank() || "booted".equals(udid)

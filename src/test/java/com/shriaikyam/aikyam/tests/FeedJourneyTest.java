@@ -28,8 +28,16 @@ import org.junit.Ignore;
  * complete, and it fails outright. Quarantined at class level rather than left in the run
  * log as noise, and rather than counted among the passing cases, which it was.
  *
+ * Ruled out as a side effect of main lacking the WDA session settings (review finding 3):
+ * re-ran on the Explore/session-stability branch, which carries the 60s snapshot bound and
+ * quiescence off, against the same device and app build. Same result - 7 of 7, same
+ * TimeoutException, 13m 39s. So this is the feed's own failure, not a missing setting.
+ *
+ *   on main (no session fixes):  7 failed, 10m 20s
+ *   on the session-fix branch:   7 failed, 13m 39s
+ *
  * The shared setUp is where to start: the feed does not reach its loaded state within 30s
- * on this device/build combination.
+ * on this device and app build.
  */
 @Ignore("Feed does not reach its loaded state within 30s on the device - all 7 cases fail in the shared @Before, none reaches its body. See the class comment.")
 public class FeedJourneyTest extends BaseTest {

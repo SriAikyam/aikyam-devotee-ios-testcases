@@ -62,6 +62,11 @@ tasks.test {
 
 // Build-gate smoke suite: only tests tagged @Category(P0.class). Same device/Appium
 // properties as `test`, so e.g. -Dappium.udid=... works unchanged.
+// NOTE: three @Category(P0) cases are currently @Ignore'd - AppsTest TC081,
+// CommentsJourneyTest TC190 and MusicTest TC144 - so this gate is three cases narrower
+// than the P0 annotations suggest. Each carries its reason; re-enabling is a one-line
+// change. (Review: noted here as well as at p1Rest, since this is where someone checking
+// the gate would look.)
 tasks.register<Test>("p0Smoke") {
     group = "verification"
     description = "Runs the P0 smoke suite (tests tagged @Category(P0))."
