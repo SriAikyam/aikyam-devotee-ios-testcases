@@ -1,15 +1,14 @@
 package com.shriaikyam.aikyam.base;
 
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.LoginPage;
 import com.shriaikyam.aikyam.pages.OnboardingPage;
-import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.ProfilePage;
 import com.shriaikyam.aikyam.pages.SettingsPage;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.appmanagement.ApplicationState;
 import io.appium.java_client.ios.IOSDriver;
-import org.openqa.selenium.support.ui.WebDriverWait;
 import io.appium.java_client.ios.options.XCUITestOptions;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,6 +17,7 @@ import org.junit.runner.Description;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.io.File;
 import java.io.IOException;
@@ -299,24 +299,12 @@ public abstract class BaseTest {
             "Allow While Using App", "Allow Full Access", "Allow Once", "Allow"
     };
 
-    /** Isolation guard. With setNoReset(true) the app resumes on whatever screen the
-     * previous test abandoned, so a later test can start somewhere it never expected -
-     * confirmed live: all nine SearchTest failures began on the Profile screen, and
-     * MusicTest's began on Events. activateApp() above only foregrounds the app; it does
-     * not navigate, so it cannot fix this by itself.
-     *
-     * Never touches authentication: no resetApp(), no clearApp(), no logout, no re-login.
-     * Bounded and idempotent - re-tapping an already-active Home tab is a harmless
-     * no-op/scroll-to-top, the same convention HomePage.waitUntilLoaded already relies on.
-     *
-     * Best-effort by design: if Home genuinely cannot be reached the test still runs and
-     * fails on its own assertion with full diagnostics, which is far easier to triage than
-     * a setUp() error that obscures which test was affected. */
     /** Bound the element snapshot WDA rebuilds on every lookup.
      *
-     * Passed as an `appium:customSnapshotTimeout` CAPABILITY first; the Appium log showed
-     * 241s lookups still getting through, so it is applied here through the settings
-     * endpoint instead, which the XCUITest driver honours at runtime.
+     * This is the ONLY place the bound is set. It was originally passed as an
+     * `appium:customSnapshotTimeout` capability, but the Appium log showed 241s lookups
+     * still getting through, so the capability was dropped and it is applied here through
+     * the settings endpoint, which the XCUITest driver honours at runtime.
      *
      * Why it matters: the Explore Posts grid is a wall of autoplaying video tiles that
      * keeps invalidating the snapshot. An unbounded resolve outruns the Selenium client's
@@ -342,7 +330,8 @@ public abstract class BaseTest {
             // actually wedges WebDriverAgent.
             driver.setSetting("customSnapshotTimeout", 60);
         } catch (RuntimeException ignored) {
-            // Setting unsupported on this driver build; the capability remains as a hint.
+            // Setting unsupported on this driver build. Nothing else bounds the snapshot -
+            // the capability form was removed because the driver ignores it (finding 7).
         }
         try {
             driver.setSetting("waitForIdleTimeout", 3);
@@ -351,6 +340,19 @@ public abstract class BaseTest {
         }
     }
 
+    /** Isolation guard. With setNoReset(true) the app resumes on whatever screen the
+     * previous test abandoned, so a later test can start somewhere it never expected -
+     * confirmed live: all nine SearchTest failures began on the Profile screen, and
+     * MusicTest's began on Events. activateApp() above only foregrounds the app; it does
+     * not navigate, so it cannot fix this by itself.
+     *
+     * Never touches authentication: no resetApp(), no clearApp(), no logout, no re-login.
+     * Bounded and idempotent - re-tapping an already-active Home tab is a harmless
+     * no-op/scroll-to-top, the same convention HomePage.waitUntilLoaded already relies on.
+     *
+     * Best-effort by design: if Home genuinely cannot be reached the test still runs and
+     * fails on its own assertion with full diagnostics, which is far easier to triage than
+     * a setUp() error that obscures which test was affected. */
     private void resetToHome() {
         // Probe cheaply. The configured 5s implicit wait would otherwise be paid on every
         // negative lookup below (up to five back attempts). Restored in the finally block
