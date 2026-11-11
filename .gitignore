@@ -3,8 +3,3 @@ build/
 .idea/
 *.iml
 .DS_Store
-
-# Owned by the physical-device PR, which regenerated it and pinned
-# distributionSha256Sum. Keeping it out of this branch so `git add -A` cannot
-# re-stage the stale copy that lives in the working tree.
-gradle/wrapper/gradle-wrapper.jar
