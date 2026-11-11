@@ -346,9 +346,14 @@ public abstract class BasePage {
                 }
             }
         }
-        // isDisplayedNow, not findElements: an off-screen or hidden match is not "on Home",
-        // and a bare findElements on a negative lookup burns the full implicit wait that
-        // BaseTest deliberately lowers around these probes (review finding 3).
+        // isDisplayedNow, not a bare findElements: an off-screen or hidden match is not
+        // "on Home", and only the displayed check rules that out.
+        //
+        // No claim about the implicit wait here: isDisplayedNow IS a findElements, so it
+        // would pay exactly the same wait. It costs nothing because BaseTest sets
+        // IMPLICIT_WAIT to Duration.ZERO for the whole suite, so a negative lookup is one
+        // round trip either way (review finding 3 on re-review - the earlier comment
+        // claiming otherwise was wrong).
         if (!isDisplayedNow(driver, idOrLabel("tab.home", "Home"))) {
             Dimension size = driver.manage().window().getSize();
             swipe(driver, size.getWidth() / 2, (int) (size.getHeight() * 0.25),

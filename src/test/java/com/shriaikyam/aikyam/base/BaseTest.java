@@ -176,7 +176,12 @@ public abstract class BaseTest {
             String teamId = getProperty("appium.xcodeOrgId", null);
             if (teamId != null && !teamId.isBlank()) {
                 options.amend("appium:xcodeOrgId", teamId)
-                        .amend("appium:xcodeSigningId", "Apple Development")
+                        // Overridable: "Apple Development" is the current identity name, but
+                        // some keychains still carry the older "iPhone Developer", and Appium
+                        // does not validate this - a mismatch fails WDA signing with no clear
+                        // error (Vinod's review).
+                        .amend("appium:xcodeSigningId",
+                                getProperty("appium.xcodeSigningId", "Apple Development"))
                         .amend("appium:updatedWDABundleId",
                                 getProperty("appium.wdaBundleId", "com.shriaikyam.WebDriverAgentRunner"));
             }
