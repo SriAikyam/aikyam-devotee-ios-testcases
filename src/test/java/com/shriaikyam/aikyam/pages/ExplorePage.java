@@ -18,8 +18,6 @@ import java.util.List;
 
 public class ExplorePage extends BasePage {
 
-    // Map/List segments of ExploreView.mapListToggle. Both are always present on the Temples
-    // tab; the active one carries the isSelected trait (see isMapViewActive()).
     /** Two taps is enough in practice: the first settles the list, the second lands on a
      * list that is no longer moving. */
     private static final int SUGGESTION_TAP_ATTEMPTS = 2;
@@ -28,6 +26,8 @@ public class ExplorePage extends BasePage {
     private static final int SUGGESTION_ARRIVAL_POLLS = 50;
     private static final long SUGGESTION_SETTLE_INTERVAL_MS = 400;
 
+    // Map/List segments of ExploreView.mapListToggle. Both are always present on the Temples
+    // tab; the active one carries the isSelected trait (see isMapViewActive()).
     private final By mapToggle = id("explore.toggle.map");
     private final By listToggle = id("explore.toggle.list");
 
@@ -77,25 +77,15 @@ public class ExplorePage extends BasePage {
         return isAnyVisible(mapToggle) && isAnyVisible(listToggle);
     }
 
-    /** Absence-oriented counterpart of {@link #isExploreVisible()}.
-     *
-     * Proving a control is GONE with isExploreVisible() is pathological here: it is two
-     * separate isAnyVisible calls, each of which polls for its full 8s budget when the
-     * element is absent, and each poll walks the whole accessibility tree. On the
-     * Devotees/Posts tabs that tree is a grid of dozens of media tiles, so a single walk
-     * runs into minutes - TC176 hung for 8+ minutes on exactly this, and the "4 minute
-     * explore.tab.temples lookup" seen earlier was the same effect, not a slow map.
-     *
-     * isVisibleNow probes once with a 2s cap, which is what BasePage already recommends for
-     * checks the caller will not retry. */
-    /** Absence, proved positively. `!isVisibleNow(...)` also returns true when the 2s probe
-     * simply expires or a snapshot lookup throws, so TC176 could pass on a timeout rather
-     * than on the toggle really being gone (review finding 6). Requiring a known non-Temples
-     * tab to be showing makes the assertion mean what it says. */
     /** True once the location search has actually produced an answer - either suggestion
      * rows, or an empty-state that has stopped changing. Without this a test can read the
      * "No matches found" that the dialog shows while the query is still in flight (review
-     * finding 2). */
+     * finding 2).
+     *
+     * Known soft spot: on the success path this costs up to SUGGESTION_ARRIVAL_POLLS *
+     * SUGGESTION_SETTLE_INTERVAL_MS, and the "steady across two reads" check is the only
+     * guard against MapKit throttling returning an empty result for a valid query. A
+     * longer-lived signal would be better if one ever becomes available. */
     public boolean waitForLocationSearchToResolve() {
         for (int poll = 0; poll < SUGGESTION_ARRIVAL_POLLS; poll++) {
             if (!suggestionLabels().isEmpty()) {
@@ -108,12 +98,6 @@ public class ExplorePage extends BasePage {
         boolean first = isNoLocationsFoundVisible();
         pause(SUGGESTION_SETTLE_INTERVAL_MS);
         return first && isNoLocationsFoundVisible() && suggestionLabels().isEmpty();
-    }
-
-    public boolean isMapListToggleAbsent() {
-        boolean onAnotherTab = isVisibleNow(
-                id("explore.tab.devotees"), id("explore.tab.posts"));
-        return onAnotherTab && !isVisibleNow(mapToggle, listToggle);
     }
 
     public boolean isListContentVisible() {

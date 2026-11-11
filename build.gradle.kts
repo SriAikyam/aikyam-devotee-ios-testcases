@@ -41,9 +41,12 @@ fun Test.prepareSimulatorLocation() {
         val serverUrl = System.getProperty("appium.serverUrl") ?: ""
         val isRemote = serverUrl.isNotEmpty() &&
             !serverUrl.contains("127.0.0.1") && !serverUrl.contains("localhost")
-        val udidGiven = System.getProperty("appium.udid") != null
+        // Evaluated against the RESOLVED udid, so the default-simulator fallback above still
+        // gets its grant on a plain `./gradlew test`. An earlier version keyed this on
+        // "was -Dappium.udid passed?", which made the fallback dead code and silently
+        // skipped the grant on the default simulator (review finding 2 on re-review).
         val isSimulator = Regex("^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$").matches(udid)
-        if (isRemote || !udidGiven || !isSimulator) {
+        if (isRemote || !isSimulator) {
             logger.lifecycle(
                 "Not a local simulator ($udid): skipping simctl location setup. Tests that assert a " +
                     "Bengaluru location (TC069/TC070) need the device to actually be there, " +

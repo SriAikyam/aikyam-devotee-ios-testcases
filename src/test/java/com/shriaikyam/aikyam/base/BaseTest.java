@@ -314,6 +314,10 @@ public abstract class BaseTest {
      * lookup, which the test reports and the next test recovers from.
      *
      * Best-effort: an older driver that does not know these settings must not fail setUp.
+     *
+     * Do NOT lower customSnapshotTimeout to "make things faster": below what the screen
+     * needs, WDA returns an EMPTY accessibility tree rather than an error, so every locator
+     * silently finds nothing and tests fail for a reason that is not theirs.
      */
     private static void applySnapshotLimits(IOSDriver driver) {
         try {
