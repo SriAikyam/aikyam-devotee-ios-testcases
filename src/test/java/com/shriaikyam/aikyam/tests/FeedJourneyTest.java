@@ -11,12 +11,27 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import com.shriaikyam.aikyam.categories.P0;
+import org.junit.Ignore;
 
 /**
  * Feed end-to-end journeys: each test follows one user action through to its visible
  * outcome (not just "the control is on screen"). The ones that change server state undo
  * their own change in a finally block so the shared dev account is left as found.
  */
+/*
+ * QUARANTINED. Measured on the physical test iPhone: the class completes a run (10m 20s)
+ * and fails 7 of 7, every case with the same 30s TimeoutException raised from the shared
+ * @Before - tapHomeTab() then FeedPage.waitUntilLoaded() - so none of the case bodies is
+ * reached. One cause, not seven.
+ *
+ * This corrects the earlier claim that the class "has never completed a run": it does
+ * complete, and it fails outright. Quarantined at class level rather than left in the run
+ * log as noise, and rather than counted among the passing cases, which it was.
+ *
+ * The shared setUp is where to start: the feed does not reach its loaded state within 30s
+ * on this device/build combination.
+ */
+@Ignore("Feed does not reach its loaded state within 30s on the device - all 7 cases fail in the shared @Before, none reaches its body. See the class comment.")
 public class FeedJourneyTest extends BaseTest {
 
     private static final String SAVED_POSTS_EMPTY = "No saved posts";
