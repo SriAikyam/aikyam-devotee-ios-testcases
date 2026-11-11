@@ -27,7 +27,8 @@ import org.junit.Ignore;
  * where every case died in the shared @Before and the class looked uniformly broken.
  *
  *   TC183                  passes
- *   TC182, TC181, TC186    reach their assertion and fail there - real failures
+ *   TC182, TC181, TC186    reach their assertion and fail there - real failures,
+ *                          tracked in SriAikyam/aikyam-devotee-ios#706
  *   TC180, TC184, TC185    WebDriver session/proxy errors, cause NOT established
  *
  * The last three are quarantined on an unproven cause. The test device's app build was
@@ -88,7 +89,8 @@ public class FeedJourneyTest extends BaseTest {
     @Category(P0.class)
     @Test
     @Ignore("Re-tapping Namaskara does not restore the original count - reaches the "
-            + "assertion and fails there. Real failure, not a harness problem.")
+            + "assertion and fails there. Tracked in SriAikyam/aikyam-devotee-ios#706; "
+            + "re-enable by deleting this line once that is fixed.")
     public void TC181_Verify_Namaskara_Then_Unnamaskara_Restores_The_Counts() {
         FeedPage feedPage = new FeedPage(driver);
         String before = feedPage.captureNumericCountsSignature();
@@ -116,7 +118,8 @@ public class FeedJourneyTest extends BaseTest {
     @Category(P0.class)
     @Test
     @Ignore("Native share sheet does not open from the feed on the device - reaches the "
-            + "assertion and fails there. Real failure, not a harness problem.")
+            + "assertion and fails there. Tracked in SriAikyam/aikyam-devotee-ios#706; "
+            + "re-enable by deleting this line once that is fixed.")
     public void TC182_Verify_Share_Opens_Native_Share_Sheet_And_Returns_To_Feed() {
         FeedPage feedPage = new FeedPage(driver);
         ProfilePage profilePage = new ProfilePage(driver);
@@ -198,7 +201,8 @@ public class FeedJourneyTest extends BaseTest {
     @Category(P0.class)
     @Test
     @Ignore("Temples filter does not change which post is first - reaches the assertion "
-            + "and fails there. Real failure, not a harness problem.")
+            + "and fails there. Tracked in SriAikyam/aikyam-devotee-ios#706; re-enable "
+            + "by deleting this line once that is fixed.")
     public void TC186_Verify_Temples_Filter_Changes_The_Feed_And_All_Posts_Restores_It() {
         FeedPage feedPage = new FeedPage(driver);
 

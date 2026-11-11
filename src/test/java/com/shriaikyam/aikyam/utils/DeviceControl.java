@@ -24,7 +24,8 @@ public final class DeviceControl {
      *
      * NOTE: build.gradle.kts carries the same UUID shape for its simctl guard. Two copies,
      * deliberately - Gradle cannot see the test classpath at configuration time - so if the
-     * rule ever changes, change it in both (flagged in review so they do not drift). */
+     * rule ever changes, change it in both. The matching back-pointer sits next to the
+     * regex in build.gradle.kts, so the coupling is visible from either side. */
     public static boolean isSimulator() {
         String udid = System.getProperty("appium.udid");
         return udid == null || udid.isBlank() || "booted".equals(udid)
