@@ -19,26 +19,27 @@ import org.junit.Ignore;
  * their own change in a finally block so the shared dev account is left as found.
  */
 /*
- * QUARANTINED, with its cause NOT yet established.
+ * QUARANTINED: the feed does not reach its loaded state reliably on the physical test
+ * device, so the shared @Before times out and most cases never reach their body.
  *
- * What is known: on the physical test iPhone the class completes a run and fails 7 of 7,
- * every case with the same 30s TimeoutException raised from the shared @Before -
- * tapHomeTab() then FeedPage.waitUntilLoaded() - so no case body is reached. One cause,
- * not seven.
+ * Measured on the REQUIRED app build (the earlier numbers were taken against a build with
+ * no accessibility identifiers and were discarded):
  *
- * What is NOT known: why. Two measurements were taken to test whether main simply lacks
- * the WDA session settings (60s snapshot bound, quiescence off) that the Explore branch
- * adds - 7 failed on main, 7 failed on that branch. Both are UNUSABLE: the app installed
- * on the device at the time exposed zero accessibility identifiers, i.e. it was not the
- * build this suite requires, so every identifier lookup would have timed out regardless
- * of the branch. The same cases that pass on the required build failed 0/8 in that window.
+ *   1 passed, 6 failed, 34m 56s
  *
- * So this @Ignore records an observed failure, not a diagnosed one. Before re-enabling or
- * explaining it, run the class on the required app build and see what it actually does.
+ * All six failures are a 30s TimeoutException from returnToFeed() - tapHomeTab() then
+ * FeedPage.waitUntilLoaded(). That one case passes is the important detail: the setUp is
+ * not broken, it is slow and intermittent. The feed sometimes loads inside 30s and usually
+ * does not, on a screen that autoplays video.
+ *
+ * So this is not a defect in the seven case bodies, and re-enabling them one at a time
+ * will not help. What needs looking at is how long the feed takes to settle on hardware,
+ * and whether waitUntilLoaded is waiting for something that only appears once every video
+ * tile has resolved.
  */
-@Ignore("Fails 7/7 at the shared @Before on the device; cause not yet diagnosed - the two "
-        + "runs taken so far were against an app build without accessibility identifiers. "
-        + "Re-measure on the required build before trusting any explanation.")
+@Ignore("Feed does not load reliably on the device: 1 passed / 6 failed on the required "
+        + "app build, the six timing out after 30s in the shared @Before. Intermittent and "
+        + "slow, not a defect in the case bodies.")
 public class FeedJourneyTest extends BaseTest {
 
     private static final String SAVED_POSTS_EMPTY = "No saved posts";
