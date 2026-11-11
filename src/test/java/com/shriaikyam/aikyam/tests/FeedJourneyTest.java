@@ -19,27 +19,26 @@ import org.junit.Ignore;
  * their own change in a finally block so the shared dev account is left as found.
  */
 /*
- * QUARANTINED. Measured on the physical test iPhone: the class completes a run (10m 20s)
- * and fails 7 of 7, every case with the same 30s TimeoutException raised from the shared
- * @Before - tapHomeTab() then FeedPage.waitUntilLoaded() - so none of the case bodies is
- * reached. One cause, not seven.
+ * QUARANTINED, with its cause NOT yet established.
  *
- * This corrects the earlier claim that the class "has never completed a run": it does
- * complete, and it fails outright. Quarantined at class level rather than left in the run
- * log as noise, and rather than counted among the passing cases, which it was.
+ * What is known: on the physical test iPhone the class completes a run and fails 7 of 7,
+ * every case with the same 30s TimeoutException raised from the shared @Before -
+ * tapHomeTab() then FeedPage.waitUntilLoaded() - so no case body is reached. One cause,
+ * not seven.
  *
- * Ruled out as a side effect of main lacking the WDA session settings (review finding 3):
- * re-ran on the Explore/session-stability branch, which carries the 60s snapshot bound and
- * quiescence off, against the same device and app build. Same result - 7 of 7, same
- * TimeoutException, 13m 39s. So this is the feed's own failure, not a missing setting.
+ * What is NOT known: why. Two measurements were taken to test whether main simply lacks
+ * the WDA session settings (60s snapshot bound, quiescence off) that the Explore branch
+ * adds - 7 failed on main, 7 failed on that branch. Both are UNUSABLE: the app installed
+ * on the device at the time exposed zero accessibility identifiers, i.e. it was not the
+ * build this suite requires, so every identifier lookup would have timed out regardless
+ * of the branch. The same cases that pass on the required build failed 0/8 in that window.
  *
- *   on main (no session fixes):  7 failed, 10m 20s
- *   on the session-fix branch:   7 failed, 13m 39s
- *
- * The shared setUp is where to start: the feed does not reach its loaded state within 30s
- * on this device and app build.
+ * So this @Ignore records an observed failure, not a diagnosed one. Before re-enabling or
+ * explaining it, run the class on the required app build and see what it actually does.
  */
-@Ignore("Feed does not reach its loaded state within 30s on the device - all 7 cases fail in the shared @Before, none reaches its body. See the class comment.")
+@Ignore("Fails 7/7 at the shared @Before on the device; cause not yet diagnosed - the two "
+        + "runs taken so far were against an app build without accessibility identifiers. "
+        + "Re-measure on the required build before trusting any explanation.")
 public class FeedJourneyTest extends BaseTest {
 
     private static final String SAVED_POSTS_EMPTY = "No saved posts";
