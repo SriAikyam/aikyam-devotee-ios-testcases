@@ -1,15 +1,14 @@
 package com.shriaikyam.aikyam.base;
 
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.LoginPage;
 import com.shriaikyam.aikyam.pages.OnboardingPage;
-import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.ProfilePage;
 import com.shriaikyam.aikyam.pages.SettingsPage;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.appmanagement.ApplicationState;
 import io.appium.java_client.ios.IOSDriver;
-import org.openqa.selenium.support.ui.WebDriverWait;
 import io.appium.java_client.ios.options.XCUITestOptions;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,6 +17,7 @@ import org.junit.runner.Description;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.io.File;
 import java.io.IOException;
@@ -141,15 +141,25 @@ public abstract class BaseTest {
                 // the queries were not slow, they were queued behind a quiescence wait that
                 // never finished. Capping the wait makes the driver answer regardless.
                 .setWaitForIdleTimeout(Duration.ofSeconds(3))
-                .amend("appium:waitForQuiescence", false)
-                // Bound the snapshot WDA builds for every element lookup. The Explore Posts
-                // grid - a wall of autoplaying video tiles - keeps invalidating that
-                // snapshot, and an unbounded resolve ran 241s for ONE lookup. Past the
-                // Selenium client's own read timeout the client gives up first, which
-                // leaves the session wedged and poisons every test after it (TC173 did
-                // exactly that, twice). Capping it at 30s turns "poisons the run" into
-                // "this one lookup fails", which the test can report and recover from.
-                .amend("appium:customSnapshotTimeout", 30);
+                // The snapshot bound is NOT set here. The driver ignores
+                // appium:customSnapshotTimeout as a capability - the Appium log showed 241s
+                // lookups still getting through with it set - so it is applied through the
+                // settings endpoint in applySnapshotLimits() instead. Keeping a dead
+                // capability alongside the real one only suggested it did something
+                // (review finding 7).
+                // Quiescence off by default, overridable with -Dappium.waitForQuiescence=true.
+                //
+                // Vinod's review is right that this is a wide blast radius, and the escape
+                // hatch is here for that reason. It is not scoped to Explore because the
+                // screens that never quiesce are not only Explore's map: the feed autoplays
+                // video (FeedDisplayMedia/YouTubePlayerView) and the music player ticks a
+                // progress bar, so a quiescence wait on those screens never settles either -
+                // which is where the 241s lookups and the empty-tree failures were measured.
+                // setWaitForIdleTimeout(3s) above already bounds any wait that does happen,
+                // and every page object here waits explicitly rather than relying on the
+                // driver to decide the app has settled.
+                .amend("appium:waitForQuiescence",
+                        Boolean.parseBoolean(getProperty("appium.waitForQuiescence", "false")));
         String platformVersion = getProperty("appium.platformVersion", null);
         if (platformVersion != null) {
             options.setPlatformVersion(platformVersion);
@@ -304,6 +314,47 @@ public abstract class BaseTest {
             "Allow While Using App", "Allow Full Access", "Allow Once", "Allow"
     };
 
+    /** Bound the element snapshot WDA rebuilds on every lookup.
+     *
+     * This is the ONLY place the bound is set. It was originally passed as an
+     * `appium:customSnapshotTimeout` capability, but the Appium log showed 241s lookups
+     * still getting through, so the capability was dropped and it is applied here through
+     * the settings endpoint, which the XCUITest driver honours at runtime.
+     *
+     * Why it matters: the Explore Posts grid is a wall of autoplaying video tiles that
+     * keeps invalidating the snapshot. An unbounded resolve outruns the Selenium client's
+     * own read timeout, and the client giving up first is what leaves WebDriverAgent
+     * wedged - after which no session can be created at all and every remaining test
+     * fails for a reason of its own. A bounded snapshot turns that into one failed
+     * lookup, which the test reports and the next test recovers from.
+     *
+     * Best-effort: an older driver that does not know these settings must not fail setUp.
+     *
+     * Do NOT lower customSnapshotTimeout to "make things faster": below what the screen
+     * needs, WDA returns an EMPTY accessibility tree rather than an error, so every locator
+     * silently finds nothing and tests fail for a reason that is not theirs.
+     */
+    private static void applySnapshotLimits(IOSDriver driver) {
+        try {
+            // 60s, not 20s. 20 was too tight: on the video-heavy feed WDA cannot resolve
+            // the snapshot in time and returns an EMPTY tree rather than an error, so every
+            // locator finds nothing - tab.home and even XCUIElementTypeNavigationBar come
+            // back as 0 matches on a screen that visibly has them. That reads as "element
+            // missing" and fails tests for a reason that is not theirs. 60s still sits well
+            // under the Selenium client's own read timeout (~180s), which is the limit that
+            // actually wedges WebDriverAgent.
+            driver.setSetting("customSnapshotTimeout", 60);
+        } catch (RuntimeException ignored) {
+            // Setting unsupported on this driver build. Nothing else bounds the snapshot -
+            // the capability form was removed because the driver ignores it (finding 7).
+        }
+        try {
+            driver.setSetting("waitForIdleTimeout", 3);
+        } catch (RuntimeException ignored) {
+            // As above.
+        }
+    }
+
     /** Isolation guard. With setNoReset(true) the app resumes on whatever screen the
      * previous test abandoned, so a later test can start somewhere it never expected -
      * confirmed live: all nine SearchTest failures began on the Profile screen, and
@@ -317,34 +368,6 @@ public abstract class BaseTest {
      * Best-effort by design: if Home genuinely cannot be reached the test still runs and
      * fails on its own assertion with full diagnostics, which is far easier to triage than
      * a setUp() error that obscures which test was affected. */
-    /** Bound the element snapshot WDA rebuilds on every lookup.
-     *
-     * Passed as an `appium:customSnapshotTimeout` CAPABILITY first; the Appium log showed
-     * 241s lookups still getting through, so it is applied here through the settings
-     * endpoint instead, which the XCUITest driver honours at runtime.
-     *
-     * Why it matters: the Explore Posts grid is a wall of autoplaying video tiles that
-     * keeps invalidating the snapshot. An unbounded resolve outruns the Selenium client's
-     * own read timeout, and the client giving up first is what leaves WebDriverAgent
-     * wedged - after which no session can be created at all and every remaining test
-     * fails for a reason of its own. A bounded snapshot turns that into one failed
-     * lookup, which the test reports and the next test recovers from.
-     *
-     * Best-effort: an older driver that does not know these settings must not fail setUp.
-     */
-    private static void applySnapshotLimits(IOSDriver driver) {
-        try {
-            driver.setSetting("customSnapshotTimeout", 20);
-        } catch (RuntimeException ignored) {
-            // Setting unsupported on this driver build; the capability remains as a hint.
-        }
-        try {
-            driver.setSetting("waitForIdleTimeout", 3);
-        } catch (RuntimeException ignored) {
-            // As above.
-        }
-    }
-
     private void resetToHome() {
         // Probe cheaply. The configured 5s implicit wait would otherwise be paid on every
         // negative lookup below (up to five back attempts). Restored in the finally block

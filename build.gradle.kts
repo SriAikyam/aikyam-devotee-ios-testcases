@@ -1,3 +1,4 @@
+import java.util.concurrent.TimeUnit
 plugins {
     java
 }
@@ -26,12 +27,79 @@ dependencies {
 // Best-effort: a remote/BrowserStack run has no local simulator, and a missing simctl must
 // not fail the build - the two tests then fail on their own assertion, with the screen as
 // evidence, which is the honest outcome.
+/** The booted simulator's UDID, or null when none is booted / simctl is unavailable.
+ * Replaces a hardcoded fallback UUID, which was one machine's simulator: anywhere else it
+ * silently pointed simctl at a device that does not exist (Vinod's review). */
+fun bootedSimulatorUdids(): List<String> = runCatching {
+    val process = ProcessBuilder("xcrun", "simctl", "list", "devices", "booted", "-j")
+        // stderr DISCARDed rather than merged and left undrained: a noisy simctl could
+        // otherwise fill the pipe buffer and block us here (review finding 3).
+        .redirectError(ProcessBuilder.Redirect.DISCARD)
+        .start()
+    if (!process.waitFor(20, TimeUnit.SECONDS)) {
+        process.destroy()
+        return@runCatching emptyList()
+    }
+    Regex("\"udid\"\\s*:\\s*\"([0-9A-F-]{36})\"")
+        .findAll(process.inputStream.bufferedReader().readText())
+        .map { it.groupValues[1] }
+        .toList()
+}.getOrElse { emptyList() }
+
 fun Test.prepareSimulatorLocation() {
     doFirst {
-        val udid = System.getProperty("appium.udid") ?: "429A2B19-3974-4483-A544-F425E0D4AC21"
+        // No hardcoded fallback. An explicit -Dappium.udid always wins, so the grant cannot
+        // land on a different simulator than Appium drives. Otherwise ask simctl what is
+        // booted here - and if more than one is, skip rather than guess which Appium picks
+        // (review finding 3).
+        val explicitUdid = System.getProperty("appium.udid")
+        val booted = if (explicitUdid != null) emptyList() else bootedSimulatorUdids()
+        if (explicitUdid == null && booted.size > 1) {
+            logger.lifecycle(
+                "${booted.size} simulators are booted and no -Dappium.udid was given, so a " +
+                    "location grant could land on the wrong one: skipping simctl location " +
+                    "setup. Pass -Dappium.udid to choose."
+            )
+            return@doFirst
+        }
+        val udid = explicitUdid ?: booted.firstOrNull()
         val bundleId = System.getProperty("appium.bundleId") ?: "com.shriaikyam.ikyam.dev"
+        // A simulator UDID is an uppercase hyphenated UUID; a real device's is not. simctl
+        // cannot grant permissions or set a location on hardware, so say so once rather than
+        // letting two silent failures leave the location tests without their prerequisite -
+        // on a device, location comes from the real GPS and has to be arranged physically.
+        // Skip for a remote grid too, not just a device: a BrowserStack run would otherwise
+        // shell out to whatever simulator this Mac happens to have under the default UDID
+        // (review finding 5).
+        val serverUrl = System.getProperty("appium.serverUrl") ?: ""
+        val isRemote = serverUrl.isNotEmpty() &&
+            !serverUrl.contains("127.0.0.1") && !serverUrl.contains("localhost")
+        // Evaluated against the RESOLVED udid, so the default-simulator fallback above still
+        // gets its grant on a plain `./gradlew test`. An earlier version keyed this on
+        // "was -Dappium.udid passed?", which made the fallback dead code and silently
+        // skipped the grant on the default simulator (review finding 2 on re-review).
+        // SECOND COPY of this rule. The other is DeviceControl.isSimulator() in
+        // src/test/java/com/shriaikyam/aikyam/utils/ (added by the quarantine PR), which the
+        // Assume-guarded cases use. Gradle cannot see the test classpath at configuration
+        // time, so the duplication is deliberate - but a change to the UUID shape has to be
+        // made in BOTH places, or one side silently disagrees (review).
+        val isSimulator = udid != null &&
+            Regex("^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$").matches(udid)
+        if (isRemote || !isSimulator) {
+            logger.lifecycle(
+                "Not a local simulator (${udid ?: "no booted simulator found"}): skipping simctl location setup. Tests that assert a " +
+                    "Bengaluru location (TC069/TC070) need the device to actually be there, " +
+                    "or a simulated location set from Xcode."
+            )
+            return@doFirst
+        }
+        logger.lifecycle(
+            "simctl location setup targeting $udid " +
+                "(${if (explicitUdid != null) "from -Dappium.udid" else "the one booted simulator"})."
+        )
         // Bengaluru: the test account's temples are seeded around it, so the map and the
-        // nearby list both have content to assert on.
+        // nearby list both have content to assert on. Applies to every test task, not only
+        // the location cases - TC070 is excluded from the suite (review nit).
         // ProcessBuilder rather than Gradle's exec: Project.exec is gone in Gradle 9, and
         // this needs no Gradle plumbing - it is two fire-and-forget simctl calls.
         listOf(
@@ -39,11 +107,17 @@ fun Test.prepareSimulatorLocation() {
             listOf("xcrun", "simctl", "location", udid, "set", "12.9716,77.5946"),
         ).forEach { command ->
             runCatching {
-                ProcessBuilder(command)
+                // waitFor with a bound: fire-and-forget let tests start before the grant
+                // and the location fix had landed - the very race this helper exists to
+                // close (review finding 4).
+                val process = ProcessBuilder(command)
                     .redirectErrorStream(true)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .start()
-                    .waitFor()
+                if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                    process.destroy()
+                    logger.lifecycle("simctl did not finish in 20s: ${command.joinToString(" ")}")
+                }
             }
         }
     }
@@ -170,6 +244,7 @@ tasks.register("regressionReport") {
         var passed = 0
         var failed = 0
         var skipped = 0
+        val skippedCases = mutableListOf<String>()
 
         val html = StringBuilder()
         html.append("<!doctype html>\n<html><head><meta charset=\"utf-8\">")
@@ -217,6 +292,12 @@ tasks.register("regressionReport") {
                     message = (errorNodes.item(0) as org.w3c.dom.Element).getAttribute("message")
                 } else if (skippedNodes.length > 0) {
                     status = "SKIPPED"
+                    // Capture the reason, not just the count. A skip is a case that did NOT
+                    // run, and "chip absent" is also what a real regression looks like - so
+                    // a silent skip can hide one for weeks (review finding 2).
+                    message = (skippedNodes.item(0) as org.w3c.dom.Element).getAttribute("message")
+                    skippedCases.add("$simpleClassName.$name - " +
+                        (if (message.isBlank()) "(no reason given)" else message))
                 }
 
                 total += 1
@@ -270,5 +351,11 @@ tasks.register("regressionReport") {
         outFile.writeText(finalHtml)
         println("Regression summary: ${outFile.absolutePath}")
         println("Total: $total  Passed: $passed  Failed: $failed  Skipped: $skipped")
+        if (skippedCases.isNotEmpty()) {
+            // Printed, not just counted: a skipped case did not run, and the reason is the
+            // only way to tell "precondition absent on this host" from a real regression.
+            println("Skipped (${skippedCases.size}) - each with its stated reason:")
+            skippedCases.forEach { println("  - $it") }
+        }
     }
 }
