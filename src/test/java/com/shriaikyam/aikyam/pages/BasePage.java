@@ -44,10 +44,19 @@ public abstract class BasePage {
     }
 
     /** The identifier, or - on an app build that does not set it yet - the visible
-     * English label, the way the Android suite matches its unlabelled Compose nodes. */
+     * English label, the way the Android suite matches its unlabelled Compose nodes.
+     *
+     * The label branch is scoped to BUTTONS. Unscoped, `label == "Home"` is satisfied by a
+     * screen title, a card or any other text on screen, which matters because these
+     * predicates back the HOME_BOTTOM_NAV and TEMPLE_BOTTOM_NAV sentinels: a false positive
+     * there makes resetToHome()/relaunchApp() believe they are home, and
+     * restorePersonalAccountIfOnTemple() open Settings on the wrong screen (review
+     * finding 2). The identifier branch stays unscoped - an identifier is already unique. */
     public static By idOrLabel(String identifier, String label) {
         return AppiumBy.iOSNsPredicateString(
-                "name == " + predicateLiteral(identifier) + " OR label == " + predicateLiteral(label));
+                "name == " + predicateLiteral(identifier)
+                        + " OR (type == 'XCUIElementTypeButton' AND label == "
+                        + predicateLiteral(label) + ")");
     }
 
     protected By textContains(String value) {
@@ -326,7 +335,10 @@ public abstract class BasePage {
                 }
             }
         }
-        if (driver.findElements(idOrLabel("tab.home", "Home")).isEmpty()) {
+        // isDisplayedNow, not findElements: an off-screen or hidden match is not "on Home",
+        // and a bare findElements on a negative lookup burns the full implicit wait that
+        // BaseTest deliberately lowers around these probes (review finding 3).
+        if (!isDisplayedNow(driver, idOrLabel("tab.home", "Home"))) {
             Dimension size = driver.manage().window().getSize();
             swipe(driver, size.getWidth() / 2, (int) (size.getHeight() * 0.25),
                     (int) (size.getHeight() * 0.90));
@@ -460,9 +472,12 @@ public abstract class BasePage {
     }
 
     static boolean isDisplayedNow(IOSDriver driver, String identifier) {
+        return isDisplayedNow(driver, AppiumBy.accessibilityId(identifier));
+    }
+
+    static boolean isDisplayedNow(IOSDriver driver, By locator) {
         try {
-            return driver.findElements(AppiumBy.accessibilityId(identifier)).stream()
-                    .anyMatch(WebElement::isDisplayed);
+            return driver.findElements(locator).stream().anyMatch(WebElement::isDisplayed);
         } catch (RuntimeException ignored) {
             return false;
         }

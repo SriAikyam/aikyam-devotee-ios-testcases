@@ -22,7 +22,9 @@ public class PriestPage extends BasePage {
     // tab is L10n.Tabs.schedules (English label "Events"), hence tab.schedules.
     private final By temple = idOrLabel("tab.temple", "Temple");
     private final By orders = idOrLabel("tab.orders", "Orders");
-    private final By events = idOrLabel("tab.schedules", "Schedules");
+    // en.lproj: "tab_schedules" = "Events". The fallback label must be the DISPLAY text,
+    // not the key's name, or the label branch can never match (review finding 1).
+    private final By events = idOrLabel("tab.schedules", "Events");
     private final By services = idOrLabel("tab.services", "Services");
     private final By apps = idOrLabel("tab.apps", "Apps");
 
