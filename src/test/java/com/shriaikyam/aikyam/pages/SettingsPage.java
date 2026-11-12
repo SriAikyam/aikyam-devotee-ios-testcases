@@ -202,9 +202,31 @@ public class SettingsPage extends BasePage {
         return tapFirstVisible(id("accountSwitcher.temple"), textContains("Temple"));
     }
 
+    /** Two different switchers, one per role, and only one of them carries identifiers.
+     *
+     * On the DEVOTEE account the switcher is AccountSwitcherSheet, whose rows do set
+     * accountSwitcher.personal / .temple. On the TEMPLE account it is
+     * PriestSettingsView.accountSwitcherSection - a separate implementation whose rows
+     * carry no such identifier, and whose subtitle reads "Personal account", lowercase.
+     * The old locator pair (that identifier, or the exact text "Personal Account") could
+     * therefore never match on the only screen this method is ever called from, so the
+     * suite could switch TO the temple account and never back. Confirmed live: the switch
+     * worked the moment the row was tapped by its real copy.
+     *
+     * Matched case-insensitively and by substring because the row is one combined element
+     * whose label is "<name>, Personal account". */
     public boolean switchToPersonalAccount() {
         openAccountSwitcherIfClosed();
-        return tapFirstVisible(id("accountSwitcher.personal"), text("Personal Account"));
+        return tapFirstVisible(
+                id("accountSwitcher.personal"),
+                text("Personal Account"),
+                labelContainsIgnoringCase("Personal account"));
+    }
+
+    private By labelContainsIgnoringCase(String value) {
+        String v = BasePage.predicateLiteral(value);
+        return AppiumBy.iOSNsPredicateString(
+                "label CONTAINS[c] " + v + " OR name CONTAINS[c] " + v);
     }
 
     public boolean isSwitchAccountSectionVisible() {

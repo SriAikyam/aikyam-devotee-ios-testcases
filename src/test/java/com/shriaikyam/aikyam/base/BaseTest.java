@@ -1,9 +1,11 @@
 package com.shriaikyam.aikyam.base;
 
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.LoginPage;
 import com.shriaikyam.aikyam.pages.OnboardingPage;
-import com.shriaikyam.aikyam.pages.BasePage;
+import com.shriaikyam.aikyam.pages.ProfilePage;
+import com.shriaikyam.aikyam.pages.SettingsPage;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.appmanagement.ApplicationState;
 import io.appium.java_client.ios.IOSDriver;
@@ -15,6 +17,7 @@ import org.junit.runner.Description;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.io.File;
 import java.io.IOException;
@@ -129,7 +132,34 @@ public abstract class BaseTest {
                 // Counterpart of autoGrantPermissions: accepts the system photo/camera/
                 // notification permission alerts as they appear.
                 .setAutoAcceptAlerts(true)
-                .setNewCommandTimeout(Duration.ofSeconds(120));
+                .setNewCommandTimeout(Duration.ofSeconds(120))
+                // WebDriverAgent waits for the app to be "idle" before answering ANY query.
+                // The Explore map never goes idle: GMSMapView animates, fires camera-idle,
+                // re-fetches nearby temples and re-clusters, continuously. That is what made a
+                // plain accessibility-id lookup for "explore.tab.temples" take 241 SECONDS,
+                // a /screenshot take 151s, and eventually left WDA unable to create a session -
+                // the queries were not slow, they were queued behind a quiescence wait that
+                // never finished. Capping the wait makes the driver answer regardless.
+                .setWaitForIdleTimeout(Duration.ofSeconds(3))
+                // The snapshot bound is NOT set here. The driver ignores
+                // appium:customSnapshotTimeout as a capability - the Appium log showed 241s
+                // lookups still getting through with it set - so it is applied through the
+                // settings endpoint in applySnapshotLimits() instead. Keeping a dead
+                // capability alongside the real one only suggested it did something
+                // (review finding 7).
+                // Quiescence off by default, overridable with -Dappium.waitForQuiescence=true.
+                //
+                // Vinod's review is right that this is a wide blast radius, and the escape
+                // hatch is here for that reason. It is not scoped to Explore because the
+                // screens that never quiesce are not only Explore's map: the feed autoplays
+                // video (FeedDisplayMedia/YouTubePlayerView) and the music player ticks a
+                // progress bar, so a quiescence wait on those screens never settles either -
+                // which is where the 241s lookups and the empty-tree failures were measured.
+                // setWaitForIdleTimeout(3s) above already bounds any wait that does happen,
+                // and every page object here waits explicitly rather than relying on the
+                // driver to decide the app has settled.
+                .amend("appium:waitForQuiescence",
+                        Boolean.parseBoolean(getProperty("appium.waitForQuiescence", "false")));
         String platformVersion = getProperty("appium.platformVersion", null);
         if (platformVersion != null) {
             options.setPlatformVersion(platformVersion);
@@ -149,6 +179,21 @@ public abstract class BaseTest {
             String udid = System.getProperty("appium.udid");
             if (udid != null && !udid.isBlank()) {
                 options.setUdid(udid);
+            }
+
+            // A physical iPhone needs WebDriverAgent signed by our team; the default
+            // com.facebook.* bundle id cannot be provisioned under it. Simulators skip this.
+            String teamId = getProperty("appium.xcodeOrgId", null);
+            if (teamId != null && !teamId.isBlank()) {
+                options.amend("appium:xcodeOrgId", teamId)
+                        // Overridable: "Apple Development" is the current identity name, but
+                        // some keychains still carry the older "iPhone Developer", and Appium
+                        // does not validate this - a mismatch fails WDA signing with no clear
+                        // error (Vinod's review).
+                        .amend("appium:xcodeSigningId",
+                                getProperty("appium.xcodeSigningId", "Apple Development"))
+                        .amend("appium:updatedWDABundleId",
+                                getProperty("appium.wdaBundleId", "com.shriaikyam.WebDriverAgentRunner"));
             }
         }
 
@@ -172,6 +217,7 @@ public abstract class BaseTest {
                     options
             );
             DRIVER_CREATIONS.incrementAndGet();
+            applySnapshotLimits(driver);
             if (reuseDriverAcrossTests()) {
                 sharedDriver = driver;
             }
@@ -256,7 +302,9 @@ public abstract class BaseTest {
     private static final int MAX_BACK_ATTEMPTS = 5;
 
     /** The Home tab of AikyamCustomTabBar (MainTabView), by its stable identifier. */
-    private static final By HOME_BOTTOM_NAV = AppiumBy.accessibilityId("tab.home");
+    private static final By HOME_BOTTOM_NAV = BasePage.idOrLabel("tab.home", "Home");
+    /** Present only while the session is on the temple/priest account. */
+    private static final By TEMPLE_BOTTOM_NAV = BasePage.idOrLabel("tab.temple", "Temple");
 
     /** Button labels of the iOS system permission alerts. autoAcceptAlerts normally
      * handles these; this is the fallback for one raised mid-reset. "Don't Allow" is
@@ -265,6 +313,47 @@ public abstract class BaseTest {
     private static final String[] PERMISSION_ALLOW_LABELS = {
             "Allow While Using App", "Allow Full Access", "Allow Once", "Allow"
     };
+
+    /** Bound the element snapshot WDA rebuilds on every lookup.
+     *
+     * This is the ONLY place the bound is set. It was originally passed as an
+     * `appium:customSnapshotTimeout` capability, but the Appium log showed 241s lookups
+     * still getting through, so the capability was dropped and it is applied here through
+     * the settings endpoint, which the XCUITest driver honours at runtime.
+     *
+     * Why it matters: the Explore Posts grid is a wall of autoplaying video tiles that
+     * keeps invalidating the snapshot. An unbounded resolve outruns the Selenium client's
+     * own read timeout, and the client giving up first is what leaves WebDriverAgent
+     * wedged - after which no session can be created at all and every remaining test
+     * fails for a reason of its own. A bounded snapshot turns that into one failed
+     * lookup, which the test reports and the next test recovers from.
+     *
+     * Best-effort: an older driver that does not know these settings must not fail setUp.
+     *
+     * Do NOT lower customSnapshotTimeout to "make things faster": below what the screen
+     * needs, WDA returns an EMPTY accessibility tree rather than an error, so every locator
+     * silently finds nothing and tests fail for a reason that is not theirs.
+     */
+    private static void applySnapshotLimits(IOSDriver driver) {
+        try {
+            // 60s, not 20s. 20 was too tight: on the video-heavy feed WDA cannot resolve
+            // the snapshot in time and returns an EMPTY tree rather than an error, so every
+            // locator finds nothing - tab.home and even XCUIElementTypeNavigationBar come
+            // back as 0 matches on a screen that visibly has them. That reads as "element
+            // missing" and fails tests for a reason that is not theirs. 60s still sits well
+            // under the Selenium client's own read timeout (~180s), which is the limit that
+            // actually wedges WebDriverAgent.
+            driver.setSetting("customSnapshotTimeout", 60);
+        } catch (RuntimeException ignored) {
+            // Setting unsupported on this driver build. Nothing else bounds the snapshot -
+            // the capability form was removed because the driver ignores it (finding 7).
+        }
+        try {
+            driver.setSetting("waitForIdleTimeout", 3);
+        } catch (RuntimeException ignored) {
+            // As above.
+        }
+    }
 
     /** Isolation guard. With setNoReset(true) the app resumes on whatever screen the
      * previous test abandoned, so a later test can start somewhere it never expected -
@@ -288,6 +377,7 @@ public abstract class BaseTest {
             dismissSoftKeyboardIfShown();
             dismissKnownPermissionDialog();
             dismissDiscardPostDialogIfPresent();
+            restorePersonalAccountIfOnTemple();
             if (tapHomeIfPresent()) {
                 return;
             }
@@ -304,6 +394,14 @@ public abstract class BaseTest {
                     return;
                 }
             }
+            // Backing out did not reach Home. Confirmed live: a run left the app on the
+            // Settings hub - whose back control the loop above could not resolve - and
+            // EVERY later test failed in its own @Before at tapHomeTab(), 22 of them in
+            // one run, none for a reason of its own. A relaunch is the only escape that
+            // does not depend on finding a control on an unknown screen, and it is cheap:
+            // noReset keeps the data container, so the session stays warm and logged in.
+            relaunchApp();
+            tapHomeIfPresent();
         } catch (RuntimeException ignored) {
             // The isolation guard must never itself fail a test.
         } finally {
@@ -311,9 +409,50 @@ public abstract class BaseTest {
         }
     }
 
+    /** The temple/priest account has no Home tab and no feed at all, so a session left on
+     * it fails whole classes for a reason none of them can see. noReset keeps the signed-in
+     * context across runs, so this does not stay inside one run: a run that ends on the
+     * temple account strands EVERY later run, until someone switches back by hand. That is
+     * exactly what happened between 15 and 24 Oct - the suite sat on the temple account for
+     * nine days, and TC270, the test meant to switch back, could not do it because the
+     * priest switcher carries none of the identifiers it looked for.
+     *
+     * Cheap to check (tab.temple is only ever present in that context) and it costs one
+     * lookup per test, against losing a whole run. */
+    private void restorePersonalAccountIfOnTemple() {
+        if (driver.findElements(TEMPLE_BOTTOM_NAV).isEmpty()) {
+            return;
+        }
+        try {
+            ProfilePage profilePage = new ProfilePage(driver);
+            SettingsPage settingsPage = new SettingsPage(driver);
+            if (profilePage.openSettingsHub()) {
+                settingsPage.switchToPersonalAccount();
+            }
+        } catch (RuntimeException ignored) {
+            // Same contract as the rest of the guard: never fail a test from here. The test
+            // body still runs and fails on its own assertion if the context is wrong.
+        }
+    }
+
     /** A keyboard left open by the previous test covers the floating tab bar. */
     private void dismissSoftKeyboardIfShown() {
         BasePage.hideKeyboardIfShown(driver);
+    }
+
+    /** Last-resort escape for resetToHome(): terminate and reactivate the app so the next
+     * test starts at the tab-bar root. Keeps the login (noReset leaves the data container
+     * in place); only the in-memory navigation stack is lost, which is exactly the point. */
+    private void relaunchApp() {
+        try {
+            driver.terminateApp(bundleId());
+            driver.activateApp(bundleId());
+            new WebDriverWait(driver, Duration.ofSeconds(30))
+                    .until(d -> !d.findElements(HOME_BOTTOM_NAV).isEmpty());
+        } catch (RuntimeException ignored) {
+            // Best-effort, same contract as the rest of the guard: the test body still runs
+            // and fails on its own assertion if Home really is unreachable.
+        }
     }
 
     private boolean tapHomeIfPresent() {

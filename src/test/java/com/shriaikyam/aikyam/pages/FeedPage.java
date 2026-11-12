@@ -33,7 +33,7 @@ public class FeedPage {
 
     private final IOSDriver driver;
 
-    private final By homeAction = AppiumBy.accessibilityId("tab.home");
+    private final By homeAction = BasePage.idOrLabel("tab.home", "Home");
     // Namaskara IS the like action; there is no separate Like control.
     private final By namaskaraAction = AppiumBy.accessibilityId("feed.post.like");
     private final By commentAction = AppiumBy.accessibilityId("feed.post.comment");

@@ -43,6 +43,33 @@ public abstract class BasePage {
         return AppiumBy.accessibilityId(identifier);
     }
 
+    /** The identifier, or - on an app build that does not set it yet - the visible
+     * English label, the way the Android suite matches its unlabelled Compose nodes.
+     *
+     * Static, unlike the instance {@link #id(String)}, because the sentinels that use it
+     * (HOME_BOTTOM_NAV / TEMPLE_BOTTOM_NAV in BaseTest) are static fields and cannot call
+     * an instance method. Build fallback locators with this rather than reaching for
+     * AppiumBy.iOSNsPredicateString directly, so the scoping below stays in one place.
+     *
+     * @implNote {@code label} is assumed to be the ENGLISH display string. The app ships
+     * Kannada, Hindi, Tamil and Telugu; on a device set to any of those the label branch
+     * will not match and only the identifier branch can succeed. That is the intended
+     * trade-off - the fallback exists for app builds missing identifiers, not for
+     * localised runs - but it is why a label-only build must be tested in English.
+     *
+     * The label branch is scoped to BUTTONS. Unscoped, `label == "Home"` is satisfied by a
+     * screen title, a card or any other text on screen, which matters because these
+     * predicates back the HOME_BOTTOM_NAV and TEMPLE_BOTTOM_NAV sentinels: a false positive
+     * there makes resetToHome()/relaunchApp() believe they are home, and
+     * restorePersonalAccountIfOnTemple() open Settings on the wrong screen (review
+     * finding 2). The identifier branch stays unscoped - an identifier is already unique. */
+    public static By idOrLabel(String identifier, String label) {
+        return AppiumBy.iOSNsPredicateString(
+                "name == " + predicateLiteral(identifier)
+                        + " OR (type == 'XCUIElementTypeButton' AND label == "
+                        + predicateLiteral(label) + ")");
+    }
+
     protected By textContains(String value) {
         String v = predicateLiteral(value);
         return AppiumBy.iOSNsPredicateString(
@@ -319,7 +346,15 @@ public abstract class BasePage {
                 }
             }
         }
-        if (!isDisplayedNow(driver, "tab.home")) {
+        // isDisplayedNow, not a bare findElements: an off-screen or hidden match is not
+        // "on Home", and only the displayed check rules that out.
+        //
+        // No claim about the implicit wait here: isDisplayedNow IS a findElements, so it
+        // would pay exactly the same wait. It costs nothing because BaseTest sets
+        // IMPLICIT_WAIT to Duration.ZERO for the whole suite, so a negative lookup is one
+        // round trip either way (review finding 3 on re-review - the earlier comment
+        // claiming otherwise was wrong).
+        if (!isDisplayedNow(driver, idOrLabel("tab.home", "Home"))) {
             Dimension size = driver.manage().window().getSize();
             swipe(driver, size.getWidth() / 2, (int) (size.getHeight() * 0.25),
                     (int) (size.getHeight() * 0.90));
@@ -453,9 +488,12 @@ public abstract class BasePage {
     }
 
     static boolean isDisplayedNow(IOSDriver driver, String identifier) {
+        return isDisplayedNow(driver, AppiumBy.accessibilityId(identifier));
+    }
+
+    static boolean isDisplayedNow(IOSDriver driver, By locator) {
         try {
-            return driver.findElements(AppiumBy.accessibilityId(identifier)).stream()
-                    .anyMatch(WebElement::isDisplayed);
+            return driver.findElements(locator).stream().anyMatch(WebElement::isDisplayed);
         } catch (RuntimeException ignored) {
             return false;
         }
