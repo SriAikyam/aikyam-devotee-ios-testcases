@@ -451,4 +451,168 @@ public class DeepLinkJourneyTest extends BaseTest {
         Assert.assertFalse("Home feed must not be shown — player is open",
                 links.isHomeFeedShown(Duration.ofSeconds(3)));
     }
+
+    // -------------------------------------------------------------------------
+    // TC269, TC271-TC278: negative / edge-case deep link flows
+    //
+    // Every routable destination should handle bad or missing data gracefully —
+    // no crash, no unintended navigation. Covers the notification deep link
+    // equivalent scenarios (a notification's liveId, deeplink or screen field
+    // with a bad value routes through the same resolution path as a URL fire).
+    // -------------------------------------------------------------------------
+
+    /**
+     * aikyam://streams/{unknownId} — ShareLinkRouter calls resolveStream, the API
+     * returns nothing, the static fallback list has no match either, so the router
+     * returns nil and falls back to .liveTab (Home tab, Live feed highlight).
+     *
+     * Notification equivalent: a push notification with liveId="doesnotexist123"
+     * or deeplink="aikyam://streams/doesnotexist123" in its payload routes through
+     * the same resolveStream call and falls back the same way.
+     */
+    @Test
+    public void TC269_Verify_Unknown_Stream_Id_Falls_Back_To_Home_Without_Crash() {
+        Assert.assertTrue(links.fire("aikyam://streams/doesnotexist123"));
+        Assert.assertTrue("Unknown stream id must fall back to Home/Live feed, not crash",
+                links.isHomeFeedShown(LAND));
+        Assert.assertFalse("No Back button — no push happened",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://music/tracks/{unknownId} — the ID format is valid so the router
+     * emits .musicTrack, MusicDeepLinkStore receives it, switches to the Music
+     * tab and attempts to load the track. The track is not found, but the app
+     * must not crash and the Music tab must remain active.
+     *
+     * Notification equivalent: deeplink="aikyam://music/tracks/doesnotexist123"
+     * in a notification payload routes here via the same MusicDeepLinkStore path.
+     */
+    @Test
+    public void TC271_Verify_Unknown_Music_Track_Id_Does_Not_Crash_Music_Tab_Active() {
+        Assert.assertTrue(links.fire("aikyam://music/tracks/doesnotexist123"));
+        MusicPage music = new MusicPage(driver);
+        Assert.assertTrue("Music tab must be active even when the track id is unknown",
+                music.isMusicScreenVisible());
+        Assert.assertFalse("No Back button — Music tab is selected, not pushed from Home",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://music/albums/{unknownId} — same as TC271 but for album ids.
+     * The router emits .musicAlbum, the album is not found, Music tab stays active.
+     */
+    @Test
+    public void TC272_Verify_Unknown_Music_Album_Id_Does_Not_Crash_Music_Tab_Active() {
+        Assert.assertTrue(links.fire("aikyam://music/albums/doesnotexist123"));
+        MusicPage music = new MusicPage(driver);
+        Assert.assertTrue("Music tab must be active even when the album id is unknown",
+                music.isMusicScreenVisible());
+        Assert.assertFalse("No Back button",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://music/tracks (no id segment) — ShareLinkRouter.aikyamNoIdDestination
+     * requires at least 2 path segments with a valid id; this URL has 1 segment so the
+     * router returns nil (not routable). The app must stay on Home, no navigation at all.
+     *
+     * Notification equivalent: a deeplink payload of "aikyam://music/tracks" (truncated)
+     * is not routable and the app falls through to the notification's screen field.
+     */
+    @Test
+    public void TC273_Verify_Music_Tracks_Without_Id_Is_Not_Routable_App_Stays_On_Home() {
+        Assert.assertTrue(links.fire("aikyam://music/tracks"));
+        Assert.assertTrue("No id = not routable; Home feed must remain showing",
+                links.isHomeFeedShown(Duration.ofSeconds(15)));
+        Assert.assertFalse("No Back button",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://music/albums (no id segment) — mirrors TC273 for albums.
+     */
+    @Test
+    public void TC274_Verify_Music_Albums_Without_Id_Is_Not_Routable_App_Stays_On_Home() {
+        Assert.assertTrue(links.fire("aikyam://music/albums"));
+        Assert.assertTrue("No id = not routable; Home feed must remain showing",
+                links.isHomeFeedShown(Duration.ofSeconds(15)));
+        Assert.assertFalse("No Back button",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://unknownscreen — the host is not in ShareLinkRouter's switch statement,
+     * so it returns nil. The app must stay on Home, no navigation, no crash.
+     *
+     * Notification equivalent: a notification payload with an unrecognised screen value
+     * or an unknown deeplink host must leave the app on whatever screen it was on.
+     */
+    @Test
+    public void TC275_Verify_Unrecognised_Deep_Link_Host_Is_Ignored_App_Stays_On_Home() {
+        Assert.assertTrue(links.fire("aikyam://doesnotexist"));
+        Assert.assertTrue("Unrecognised host must be ignored; Home feed must remain showing",
+                links.isHomeFeedShown(Duration.ofSeconds(15)));
+        Assert.assertFalse("No Back button — nothing navigated",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://panchang/extrapath — the router's no-id handler guards
+     * `segments.isEmpty` for single-destination hosts like panchang, settings, etc.
+     * Any extra path segment makes the URL not routable: the app stays on Home.
+     *
+     * Also covers the same guard for aikyam://settings/x, aikyam://orders/x (without
+     * a valid orders id), aikyam://explore/x, aikyam://events/x and aikyam://apps/x.
+     */
+    @Test
+    public void TC276_Verify_Extra_Path_On_Single_Destination_Host_Is_Not_Routable() {
+        for (String url : new String[]{
+                "aikyam://panchang/doesnotexist",
+                "aikyam://settings/doesnotexist",
+                "aikyam://explore/doesnotexist",
+                "aikyam://events/doesnotexist",
+                "aikyam://apps/doesnotexist",
+        }) {
+            Assert.assertTrue("fire must succeed for: " + url, links.fire(url));
+            Assert.assertTrue("Extra path segment makes link non-routable; Home must stay: " + url,
+                    links.isHomeFeedShown(Duration.ofSeconds(15)));
+            Assert.assertFalse("No Back button for: " + url,
+                    links.isShown(links.byDesc("Back")));
+        }
+    }
+
+    /**
+     * aikyam://music/tracks/{malformedId} — the id contains characters outside
+     * [A-Za-z0-9_-] so ShareLinkRouter.isValidId returns false and the router
+     * returns nil (not routable). The app must stay on Home.
+     *
+     * Notification equivalent: a deeplink payload with a path-encoded special
+     * character in the id (e.g. from a malformed notification) must not crash.
+     */
+    @Test
+    public void TC277_Verify_Malformed_Music_Track_Id_Is_Not_Routable_App_Stays_On_Home() {
+        // Space (URL-encoded as %20) and ! are outside the allowed id charset.
+        Assert.assertTrue(links.fire("aikyam://music/tracks/bad%20track%21"));
+        Assert.assertTrue("Malformed id = not routable; Home feed must remain showing",
+                links.isHomeFeedShown(Duration.ofSeconds(15)));
+        Assert.assertFalse("No Back button", links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://streams/{malformedId} — space-encoded id fails isValidId, router
+     * returns nil from aikyamNoIdDestination. Because the host is "streams" in the
+     * no-id route branch (empty-path guard), a non-empty path makes the whole URL
+     * not routable: the app stays on Home.
+     *
+     * Also documents that a notification payload deeplink="aikyam://streams/%20"
+     * (blank or whitespace id) must not crash and must leave the app on Home.
+     */
+    @Test
+    public void TC278_Verify_Malformed_Stream_Id_Is_Not_Routable_App_Stays_On_Home() {
+        Assert.assertTrue(links.fire("aikyam://streams/bad%20id%21"));
+        Assert.assertTrue("Malformed stream id = not routable; Home feed must remain showing",
+                links.isHomeFeedShown(Duration.ofSeconds(15)));
+        Assert.assertFalse("No Back button", links.isShown(links.byDesc("Back")));
+    }
 }
