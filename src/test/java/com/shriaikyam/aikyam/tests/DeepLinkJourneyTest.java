@@ -3,8 +3,10 @@ package com.shriaikyam.aikyam.tests;
 import com.shriaikyam.aikyam.base.BaseTest;
 import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.DeepLinkPage;
+import com.shriaikyam.aikyam.pages.ExplorePage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.HomePage;
+import com.shriaikyam.aikyam.pages.MusicPage;
 import com.shriaikyam.aikyam.pages.ProfilePage;
 import org.junit.After;
 import org.junit.Assert;
@@ -185,5 +187,81 @@ public class DeepLinkJourneyTest extends BaseTest {
         Assert.assertTrue(links.fire("https://m.shriaikyam.com/u/doesnotexist123"));
         Assert.assertTrue("User profile screen for the linked id must show",
                 links.waitForText("@doesnotexist123", LAND) && links.isShown(links.byDesc("Back")));
+    }
+
+    // -------------------------------------------------------------------------
+    // TC255-TC257: tab-switch deep links (PR #698 fix for issue #668 and #699)
+    // -------------------------------------------------------------------------
+
+    /**
+     * aikyam://explore must switch to the Explore tab, not push Explore as an overlay on
+     * the Home tab (which left Home selected in the tab bar and showed a Back button).
+     * Fixed in feat/aikyam-deeplinks-clean (issue #668).
+     */
+    @Test
+    public void TC255_Verify_Explore_Deep_Link_Switches_To_Explore_Tab_Not_Push_On_Home() {
+        Assert.assertTrue("Fire aikyam://explore must succeed", links.fire("aikyam://explore"));
+        ExplorePage explore = new ExplorePage(driver);
+        Assert.assertTrue("Explore content (map/list toggle) must be visible after the tab switch",
+                explore.isExploreVisible());
+        // A tab switch leaves no Back button — only a push on the navigation stack would.
+        Assert.assertFalse("No Back button must appear after a tab switch",
+                links.isShown(links.byDesc("Back")));
+        // The bottom nav must still be visible — we are at the tab root, not inside a pushed screen.
+        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
+                new HomePage(driver).isHomeTabVisible());
+    }
+
+    /**
+     * aikyam://music must switch to the Music tab directly, with no Back button (tab switch,
+     * not a push). The Music tab's own header must be visible.
+     */
+    @Test
+    public void TC256_Verify_Music_Deep_Link_Switches_To_Music_Tab_Not_Push() {
+        Assert.assertTrue("Fire aikyam://music must succeed", links.fire("aikyam://music"));
+        MusicPage music = new MusicPage(driver);
+        Assert.assertTrue("Music tab content must be visible after the link",
+                music.isMusicScreenVisible());
+        Assert.assertFalse("No Back button must appear after a tab switch",
+                links.isShown(links.byDesc("Back")));
+        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
+                new HomePage(driver).isHomeTabVisible());
+    }
+
+    /**
+     * aikyam://streams (no stream id) must stay on the Home tab and open the Live feed
+     * highlight instead of returning not-routable. Fixed by PR #699 (issue #685).
+     * Before the fix the bare host was silently dropped and nothing happened.
+     */
+    @Test
+    public void TC257_Verify_Bare_Streams_Link_Stays_On_Home_And_Opens_Live_Feed() {
+        Assert.assertTrue("Fire aikyam://streams must succeed", links.fire("aikyam://streams"));
+        // The app must stay on the Home tab; the Live feed highlight (live banner or the
+        // existing feed) must be visible — specifically, no crash and no unexpected navigation.
+        Assert.assertTrue("Home tab must remain active after a bare streams link",
+                links.isHomeFeedShown(LAND));
+        Assert.assertFalse("No push must have occurred (no Back button)",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * For a priest in temple context, aikyam://explore must NOT open the Orders tab.
+     * Tab id 3 is Orders for priests, so the link is not routable and the app stays
+     * wherever it was (fix from feat/aikyam-deeplinks-clean PR #698 review P2).
+     *
+     * Skipped in automated runs: switching to a priest temple account requires a dedicated
+     * priest test account and a temple context switch via PriestSettingsPage, which the
+     * current CI device pool cannot guarantee per run. Verify manually using the QA
+     * priest account documented in the team's Notion test-accounts page.
+     */
+    @Ignore("Requires dedicated priest temple test account - verify manually")
+    @Test
+    public void TC258_Verify_Explore_Deep_Link_Not_Routable_For_Priest_Temple_Account() {
+        // Switch to temple context via Settings → Account switcher (PriestSettingsPage).
+        // Fire aikyam://explore.
+        // Assert: Orders tab content must NOT be visible; Home or the previous tab stays.
+        // Assert: No Back button (no push occurred).
+        // Switch back to personal account to restore the session for subsequent tests.
+        Assert.fail("Not implemented — requires priest temple context setup");
     }
 }
