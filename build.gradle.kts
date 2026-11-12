@@ -150,6 +150,7 @@ tasks.test {
         "appium.bstackBuild",
         "appium.bstackSession",
         "appium.bstackLogin",
+        "appium.templeAccount",
     ).forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
