@@ -1,13 +1,17 @@
 package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
+import com.shriaikyam.aikyam.pages.AppsPage;
 import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.DeepLinkPage;
+import com.shriaikyam.aikyam.pages.EventsPage;
 import com.shriaikyam.aikyam.pages.ExplorePage;
+import com.shriaikyam.aikyam.pages.FamilyMembersPage;
 import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.HomePage;
 import com.shriaikyam.aikyam.pages.MusicPage;
 import com.shriaikyam.aikyam.pages.ProfilePage;
+import com.shriaikyam.aikyam.pages.SettingsPage;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -263,5 +267,188 @@ public class DeepLinkJourneyTest extends BaseTest {
         // Assert: No Back button (no push occurred).
         // Switch back to personal account to restore the session for subsequent tests.
         Assert.fail("Not implemented — requires priest temple context setup");
+    }
+
+    // -------------------------------------------------------------------------
+    // TC259-TC260: remaining tab-switch deep links
+    // -------------------------------------------------------------------------
+
+    /**
+     * aikyam://events must switch to the Events tab (tab id 2) without pushing.
+     * NotificationHandler screen="events" routes here via the same tab-switch path.
+     */
+    @Test
+    public void TC259_Verify_Events_Deep_Link_Switches_To_Events_Tab_Not_Push() {
+        Assert.assertTrue("Fire aikyam://events must succeed", links.fire("aikyam://events"));
+        EventsPage events = new EventsPage(driver);
+        Assert.assertTrue("Events content must be visible after the tab switch",
+                events.isEventsScreenVisible());
+        Assert.assertFalse("No Back button must appear after a tab switch",
+                links.isShown(links.byDesc("Back")));
+        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
+                new HomePage(driver).isHomeTabVisible());
+    }
+
+    /**
+     * aikyam://apps must switch to the Apps tab (tab id 4) without pushing.
+     * NotificationHandler screen="settings" routes to this same tab (tab 4 = Apps).
+     */
+    @Test
+    public void TC260_Verify_Apps_Deep_Link_Switches_To_Apps_Tab_Not_Push() {
+        Assert.assertTrue("Fire aikyam://apps must succeed", links.fire("aikyam://apps"));
+        AppsPage apps = new AppsPage(driver);
+        Assert.assertTrue("Apps screen must be visible after the tab switch",
+                apps.isAppsScreenVisible());
+        Assert.assertFalse("No Back button must appear after a tab switch",
+                links.isShown(links.byDesc("Back")));
+        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
+                new HomePage(driver).isHomeTabVisible());
+    }
+
+    // -------------------------------------------------------------------------
+    // TC261-TC265: feature-screen deep links (pushed onto the navigation stack)
+    // -------------------------------------------------------------------------
+
+    /**
+     * aikyam://settings pushes the Settings hub onto the current tab's stack.
+     * Unlike tab-switch links, a Back button IS expected (it is a push route).
+     */
+    @Test
+    public void TC261_Verify_Settings_Deep_Link_Opens_Settings_Hub_With_Back_Button() {
+        Assert.assertTrue("Fire aikyam://settings must succeed", links.fire("aikyam://settings"));
+        SettingsPage settings = new SettingsPage(driver);
+        Assert.assertTrue("Settings hub must be reachable (Logout row visible)",
+                settings.isSettingsHubVisible());
+        Assert.assertTrue("Back button must be visible — settings is a pushed route",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://orders pushes the Order History screen. This is a push route so a
+     * Back button appears. The screen title "Order History" must be visible.
+     */
+    @Test
+    public void TC262_Verify_Orders_Deep_Link_Opens_Order_History_With_Back_Button() {
+        Assert.assertTrue("Fire aikyam://orders must succeed", links.fire("aikyam://orders"));
+        Assert.assertTrue("Order History screen title must be visible",
+                links.waitForText("Order History", LAND));
+        Assert.assertTrue("Back button must be visible — orders is a pushed route",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://family_members pushes the Family Members screen. Back button expected.
+     */
+    @Test
+    public void TC263_Verify_Family_Members_Deep_Link_Opens_Family_Screen_With_Back_Button() {
+        Assert.assertTrue("Fire aikyam://family_members must succeed",
+                links.fire("aikyam://family_members"));
+        FamilyMembersPage family = new FamilyMembersPage(driver);
+        Assert.assertTrue("Family Members screen must be visible",
+                family.isScreenVisible());
+        Assert.assertTrue("Back button must be visible — family members is a pushed route",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://panchang opens the Panchang mini-app web view directly (a push route,
+     * not just navigating to the Apps tab). Back button expected; web view must load.
+     */
+    @Test
+    public void TC264_Verify_Panchang_Deep_Link_Opens_Panchang_Mini_App_Web_View() {
+        Assert.assertTrue("Fire aikyam://panchang must succeed", links.fire("aikyam://panchang"));
+        AppsPage apps = new AppsPage(driver);
+        Assert.assertTrue("Panchang web view must load",
+                apps.waitForMiniAppWebViewToLoad());
+        Assert.assertTrue("Mini-app web view must be visible",
+                apps.isMiniAppWebViewVisible());
+        Assert.assertTrue("Back button must be visible — mini app is a pushed route",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://stotragalu opens the Stotragalu mini-app web view (same push mechanic
+     * as panchang). Back button expected; web view must load.
+     */
+    @Test
+    public void TC265_Verify_Stotragalu_Deep_Link_Opens_Stotragalu_Mini_App_Web_View() {
+        Assert.assertTrue("Fire aikyam://stotragalu must succeed",
+                links.fire("aikyam://stotragalu"));
+        AppsPage apps = new AppsPage(driver);
+        Assert.assertTrue("Stotragalu web view must load",
+                apps.waitForMiniAppWebViewToLoad());
+        Assert.assertTrue("Mini-app web view must be visible",
+                apps.isMiniAppWebViewVisible());
+        Assert.assertTrue("Back button must be visible — mini app is a pushed route",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    // -------------------------------------------------------------------------
+    // TC266-TC268: entity deep links that need live test data (@Ignore until IDs are stable)
+    // -------------------------------------------------------------------------
+
+    /**
+     * aikyam://music/tracks/{id} opens the music track in the Music tab's player.
+     * The Music deep link goes through MusicDeepLinkStore (not appRoute), so the tab
+     * switches to Music and the track auto-plays.
+     *
+     * Skipped: requires a stable track id from the dev/staging music catalogue.
+     * To enable: replace TRACK_ID with a real id from the Music tab and remove @Ignore.
+     */
+    @Ignore("Needs stable track id from dev catalogue — replace TRACK_ID and remove @Ignore")
+    @Test
+    public void TC266_Verify_Music_Track_Deep_Link_Opens_Track_In_Music_Tab() {
+        final String TRACK_ID = "TRACK_ID";
+        Assert.assertTrue(links.fire("aikyam://music/tracks/" + TRACK_ID));
+        MusicPage music = new MusicPage(driver);
+        Assert.assertTrue("Music tab must be active after a track deep link",
+                music.isMusicScreenVisible());
+        // The player or now-playing bar must surface the track — verify via a known
+        // accessibility id once you have an id from the dev catalogue.
+        Assert.assertFalse("No Back button at the Music tab root",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://music/albums/{id} opens the music album in the Music tab.
+     *
+     * Skipped: requires a stable album id from the dev/staging music catalogue.
+     */
+    @Ignore("Needs stable album id from dev catalogue — replace ALBUM_ID and remove @Ignore")
+    @Test
+    public void TC267_Verify_Music_Album_Deep_Link_Opens_Album_In_Music_Tab() {
+        final String ALBUM_ID = "ALBUM_ID";
+        Assert.assertTrue(links.fire("aikyam://music/albums/" + ALBUM_ID));
+        MusicPage music = new MusicPage(driver);
+        Assert.assertTrue("Music tab must be active after an album deep link",
+                music.isMusicScreenVisible());
+        Assert.assertFalse("No Back button at the Music tab root",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * aikyam://streams/{id} with a valid YouTube live stream id opens the live stream
+     * player (YouTubeLivePlayerView). Without a valid id the app falls back to .liveTab
+     * (TC257 covers that). Requires an active or archived YouTube stream on the platform.
+     *
+     * Notification scenario equivalent: a push notification carrying liveId="{id}" or
+     * deeplink="aikyam://streams/{id}" in its payload routes here via the same player.
+     *
+     * Skipped: live streams are transient; pin a known stream id from your QA environment
+     * and remove @Ignore for local verification.
+     */
+    @Ignore("Needs an active/archived stream id — pin one from QA env and remove @Ignore")
+    @Test
+    public void TC268_Verify_Stream_Id_Deep_Link_Opens_Live_Stream_Player() {
+        final String STREAM_ID = "STREAM_ID";
+        Assert.assertTrue(links.fire("aikyam://streams/" + STREAM_ID));
+        // The live stream player shows a video player UI. Assert a known element such as
+        // a close/back action or the player container's accessibility id once you have a
+        // real stream id.
+        Assert.assertTrue("Stream player must open (live or replay)",
+                links.waitFor(links.byDesc("Back"), LAND)
+                        || links.isShown(links.byDesc("Close")));
+        Assert.assertFalse("Home feed must not be shown — player is open",
+                links.isHomeFeedShown(Duration.ofSeconds(3)));
     }
 }
