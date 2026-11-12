@@ -28,8 +28,8 @@ public class ExplorePage extends BasePage {
 
     // Map/List segments of ExploreView.mapListToggle. Both are always present on the Temples
     // tab; the active one carries the isSelected trait (see isMapViewActive()).
-    private final By mapToggle = id("explore.toggle.map");
-    private final By listToggle = id("explore.toggle.list");
+    private final By mapToggle = idOrLabel("explore.toggle.map", "Map");
+    private final By listToggle = idOrLabel("explore.toggle.list", "List");
 
     // Pencil button in ExploreView.locationInfoPill - only rendered once location resolution
     // has landed (viewModel.shouldShowLocationPill).
@@ -42,7 +42,10 @@ public class ExplorePage extends BasePage {
     private final By noLocationsFoundText = id("explore.location.empty");
 
     // The Explore search capsule; one field whose placeholder changes per tab.
-    private final By searchField = id("explore.search");
+    // Placeholder fallback: explore.search ships only on the app branch qa/appium-ios-tests;
+    // on a main/PR build it is the one text field whose placeholder starts "Search".
+    private final By searchField = AppiumBy.iOSNsPredicateString("name == 'explore.search'"
+            + " OR (type == 'XCUIElementTypeTextField' AND placeholderValue BEGINSWITH 'Search')");
 
     // List-view-only content (ExploreView.templesListContent).
     private final By listLoading = id("explore.list.loading");

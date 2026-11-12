@@ -248,4 +248,25 @@ public class FeedTest extends BaseTest {
                 feedPage.isAppUsableAfterBackButtonSpam(10)
         );
     }
+
+    /** iOS PR #701: paging follows the server's hasMore, not how many posts survived the
+     * special-card filter. A special-card-only page can't be forced from the UI (the PR's
+     * unit tests cover that), so this checks the end-to-end symptom: deep into the feed, a
+     * swipe still brings new posts instead of hitting a false end. */
+    @Test
+    public void TC365_Verify_Feed_Keeps_Paging_Deep_Into_Timeline() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        for (int swipe = 0; swipe < 30; swipe++) {
+            feedPage.swipeUp();
+        }
+        String deepState = feedPage.captureFeedState();
+        feedPage.swipeUp();
+
+        Assert.assertTrue(
+                "After 30 swipes the feed should still load and scroll to more posts",
+                feedPage.didFeedScroll(deepState)
+        );
+    }
 }

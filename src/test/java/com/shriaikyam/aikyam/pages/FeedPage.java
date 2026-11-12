@@ -35,12 +35,14 @@ public class FeedPage {
 
     private final By homeAction = BasePage.idOrLabel("tab.home", "Home");
     // Namaskara IS the like action; there is no separate Like control.
-    private final By namaskaraAction = AppiumBy.accessibilityId("feed.post.like");
+    // idOrLabel: the feed.post.* identifiers ship only on the app branch qa/appium-ios-tests;
+    // the label fallback lets these run on a plain main/PR build too (VoiceOver labels).
+    private final By namaskaraAction = BasePage.idOrLabel("feed.post.like", "Like");
     private final By commentAction = AppiumBy.accessibilityId("feed.post.comment");
-    private final By shareAction = AppiumBy.accessibilityId("feed.post.share");
+    private final By shareAction = BasePage.idOrLabel("feed.post.share", "Share");
     private final By saveAction = AppiumBy.accessibilityId("feed.post.save");
     // Only rendered on someone else's post (PostOptionsPolicy hides it on own posts in the feed).
-    private final By moreOptionsAction = AppiumBy.accessibilityId("feed.post.more");
+    private final By moreOptionsAction = BasePage.idOrLabel("feed.post.more", "More options");
     private final By authorHeader = AppiumBy.accessibilityId("feed.post.author");
     private final By profileAvatarAction = AppiumBy.accessibilityId("header.account");
     private final By createPostAction = AppiumBy.accessibilityId("feed.createPost");
@@ -234,6 +236,37 @@ public class FeedPage {
     private boolean pageSourceContains(String value) {
         String pageSource = driver.getPageSource();
         return pageSource != null && pageSource.contains(value);
+    }
+
+    /** A row of the open post options menu, by its English label: PostOptionsMenu rows set
+     * no accessibilityIdentifier, so the visible copy is the only handle. */
+    public boolean isPostOptionVisible(String label) {
+        return !visibleElements(BasePage.byExactText(label)).isEmpty();
+    }
+
+    public boolean tapPostOption(String label) {
+        List<WebElement> rows = visibleElements(BasePage.byExactText(label));
+        if (rows.isEmpty()) {
+            return false;
+        }
+        rows.get(0).click();
+        return true;
+    }
+
+    /** Polls the raw page source for a fragment, so a CapsuleToast (on screen ~2.5s) is
+     * caught. Pass a fragment without apostrophes: the XML source may escape them. */
+    public boolean waitForText(String fragment, int timeoutSec) {
+        long end = System.currentTimeMillis() + timeoutSec * 1000L;
+        while (System.currentTimeMillis() < end) {
+            try {
+                if (pageSourceContains(fragment)) {
+                    return true;
+                }
+            } catch (RuntimeException transientFailure) {
+                // Source fetch raced a re-render; poll again.
+            }
+        }
+        return false;
     }
 
     /** Taps the top-bar avatar, which opens the account/settings hub. */

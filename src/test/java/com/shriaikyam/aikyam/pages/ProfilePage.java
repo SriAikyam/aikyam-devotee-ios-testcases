@@ -20,7 +20,9 @@ public class ProfilePage extends BasePage {
     }
 
     // AccountSettingsButton: the avatar at the trailing end of every tab's header.
-    private final By profileAvatarAction = id("header.account");
+    // Label fallback: header.account ships only on the app branch qa/appium-ios-tests; on a
+    // main/PR build the avatar button is labelled "Settings".
+    private final By profileAvatarAction = idOrLabel("header.account", "Settings");
     private final By personalProfileAction = id("settings.row.personalProfile");
     private final By editProfileAction = id("profile.edit");
     private final By editProfileTitle = id("profile.edit.title");
@@ -78,7 +80,7 @@ public class ProfilePage extends BasePage {
     /** The avatar is on every tab's header but not on pushed screens or sheets, so this
      * backs out screen by screen until it is reachable again. */
     public boolean openProfile() {
-        return reachAvatar() && tapFirstVisible(profileAvatarAction) && openPersonalProfile();
+        return reachAvatar() && tapAvatar() && openPersonalProfile();
     }
 
     /** Cheap back-outs do the retrying; the Home-tab reset (scroll to top) runs at most once. */
@@ -124,7 +126,19 @@ public class ProfilePage extends BasePage {
     /** Reaches the Settings hub (avatar tap only) - where Logout lives, one level
      * shallower than openProfile(). */
     public boolean openSettingsHub() {
-        return reachAvatar() && tapFirstVisible(profileAvatarAction);
+        return reachAvatar() && tapAvatar();
+    }
+
+    /** Taps the lowest match. With the label fallback (no header.account on a main/PR build)
+     * three "Settings" buttons match, the first a copy at the very top (y=16) that opens
+     * nothing; the avatar is the one below it. With the identifier there is one match. */
+    private boolean tapAvatar() {
+        List<WebElement> found = visibleElements(profileAvatarAction);
+        if (found.isEmpty()) {
+            return false;
+        }
+        found.stream().max(java.util.Comparator.comparingInt(e -> e.getRect().getY())).get().click();
+        return true;
     }
 
     public boolean openPersonalProfile() {

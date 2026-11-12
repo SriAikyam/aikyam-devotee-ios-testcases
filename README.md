@@ -39,7 +39,8 @@ cd AppiumTests
 ```
 
 Optional properties: `appium.serverUrl`, `appium.bundleId`, `appium.deviceName`,
-`appium.platformVersion`, `appium.worker`.
+`appium.platformVersion`, `appium.worker`, `appium.wdaLocalPort` (give each booted
+simulator its own WebDriverAgent port when two runs share a Mac).
 
 Read the verdict from the JUnit XML in `build/test-results/<task>/`. Failure screenshots and
 page sources are saved to `build/test-results/diagnostics/<TestClass>/`.
