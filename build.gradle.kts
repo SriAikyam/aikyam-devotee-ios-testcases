@@ -173,6 +173,11 @@ tasks.test {
 
 // Build-gate smoke suite: only tests tagged @Category(P0.class). Same device/Appium
 // properties as `test`, so e.g. -Dappium.udid=... works unchanged.
+// NOTE: seven @Category(P0) cases are currently @Ignore'd - AppsTest TC081,
+// MusicTest TC144, FeedJourneyTest TC180/TC181/TC182/TC186, and CommentsJourneyTest TC190
+// - so this gate is seven cases narrower than the P0 annotations suggest. Each carries
+// its reason; re-enabling is a one-line change. (Review: noted here as well as at p1Rest,
+// since this is where someone checking the gate would look.)
 tasks.register<Test>("p0Smoke") {
     group = "verification"
     description = "Runs the P0 smoke suite (tests tagged @Category(P0))."
@@ -193,7 +198,14 @@ tasks.register<Test>("p0Smoke") {
     prepareSimulatorLocation()
 }
 
-// Everything the P0 smoke gate does NOT cover - the 79 tests outside @Category(P0).
+// Everything the P0 smoke gate does NOT cover - every test outside @Category(P0).
+// Deliberately not a hardcoded count: the previous "79" went stale as cases were added
+// and quarantined (review finding 4).
+//
+// Note for the smoke gate: seven @Category(P0) cases are currently @Ignore'd - AppsTest
+// TC081, MusicTest TC144, FeedJourneyTest TC180/TC181/TC182/TC186, and CommentsJourneyTest
+// TC190 - so the gate is seven cases narrower than the P0 annotations suggest. Each
+// carries its reason; re-enabling is a one-line change.
 // Exists because "run the rest" was otherwise only reachable by running all 106 and
 // re-paying the ~14 min the gate already proved green. Same device/Appium properties as
 // `test`, and it writes to its own results directory so a p1Rest run never overwrites a

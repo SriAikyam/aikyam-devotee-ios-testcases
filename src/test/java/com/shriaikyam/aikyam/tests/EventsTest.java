@@ -6,6 +6,7 @@ import com.shriaikyam.aikyam.pages.HomePage;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.Ignore;
 
 /**
  * Events (bottom nav → Events).
@@ -29,6 +30,7 @@ public class EventsTest extends BaseTest {
     }
 
     @Test
+    @Ignore("Needs a seeded event with actions on the card; dev backend has none.")
     public void TC156_Verify_Event_Card_Shows_Its_Actions() {
         EventsPage eventsPage = new EventsPage(driver);
 
