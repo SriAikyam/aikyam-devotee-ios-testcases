@@ -237,6 +237,73 @@ public class FeedTest extends BaseTest {
                 feedPage.isAnyFeedItemVisible());
     }
 
+    // ---- Load-more failure and retry (aikyam-devotee-ios#712) ----
+    // All three go offline through setAirplaneMode, which skips them where the network
+    // can't be toggled (the iOS simulator). The posts already on screen stay loaded, so
+    // going offline after waitUntilLoaded() makes the NEXT page the one that fails.
+
+    private static final int SWIPES_TO_PAGE_END = 40;
+
+    @Test
+    public void TC380_Verify_Load_More_Failure_Shows_Retry_Footer_And_Keeps_Posts() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        feedPage.setAirplaneMode(true);
+        try {
+            Assert.assertTrue("A failed next page should show the error footer under the posts",
+                    feedPage.scrollUntilLoadMoreErrorVisible(SWIPES_TO_PAGE_END));
+            Assert.assertTrue("The footer should offer Retry", feedPage.isLoadMoreRetryVisible());
+            feedPage.swipeDown();
+            Assert.assertTrue("The posts already loaded should stay, not be replaced by a "
+                    + "full-screen error", feedPage.isAnyFeedItemVisible());
+        } finally {
+            feedPage.setAirplaneMode(false);
+        }
+    }
+
+    @Test
+    public void TC381_Verify_Retry_While_Still_Offline_Keeps_The_Footer() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        feedPage.setAirplaneMode(true);
+        try {
+            Assert.assertTrue("Precondition: the load-more error footer should show",
+                    feedPage.scrollUntilLoadMoreErrorVisible(SWIPES_TO_PAGE_END));
+            Assert.assertTrue("Retry should be tappable", feedPage.tapLoadMoreRetry());
+            // The retry fails again offline; the footer must come back rather than leave
+            // the user at the bottom with nothing to tap.
+            Assert.assertTrue("After a failed Retry the footer should still be shown",
+                    feedPage.scrollUntilLoadMoreErrorVisible(3));
+            Assert.assertTrue("Retry should still be offered", feedPage.isLoadMoreRetryVisible());
+        } finally {
+            feedPage.setAirplaneMode(false);
+        }
+    }
+
+    @Test
+    public void TC382_Verify_Feed_Retries_Load_More_By_Itself_On_Reconnect() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        feedPage.setAirplaneMode(true);
+        try {
+            Assert.assertTrue("Precondition: the load-more error footer should show",
+                    feedPage.scrollUntilLoadMoreErrorVisible(SWIPES_TO_PAGE_END));
+        } finally {
+            feedPage.setAirplaneMode(false);
+        }
+
+        // No Retry tap and no pull-to-refresh: the reconnect alone has to load the page.
+        Assert.assertTrue("The footer should clear by itself once the network is back",
+                feedPage.waitForLoadMoreErrorGone());
+        String atOldEnd = feedPage.captureFeedState();
+        feedPage.swipeUp();
+        Assert.assertTrue("The next posts should load below the old end of the list",
+                feedPage.didFeedScroll(atOldEnd));
+    }
+
     @Test
     public void TC064_Verify_Feed_Usable_After_Rapid_Back_Button_Spam() {
         FeedPage feedPage = new FeedPage(driver);

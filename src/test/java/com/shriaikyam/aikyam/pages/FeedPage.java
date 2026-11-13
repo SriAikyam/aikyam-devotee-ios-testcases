@@ -199,6 +199,53 @@ public class FeedPage {
         return hasNonBlankPageSource();
     }
 
+    // ---- Load-more error footer (aikyam-devotee-ios#712) ----
+
+    // Shown under the posts when the NEXT page fails; a failure on an empty list is the
+    // full-screen error instead. The label branches cover builds without the identifiers,
+    // English copy only ("No internet connection." is APIError's offline text).
+    private final By loadMoreError = AppiumBy.iOSNsPredicateString(
+            "name == 'feed.loadMore.error' OR label == 'No internet connection.'");
+    private final By loadMoreRetry = BasePage.idOrLabel("feed.loadMore.retry", "Retry");
+    // Debounce (1s) + the page request, plus the radio re-associating after airplane mode.
+    private static final Duration RECONNECT_TIMEOUT = Duration.ofSeconds(30);
+
+    /** Swipes toward the end of the loaded posts until the load-more error footer shows.
+     * Each swipe moves about half a screen, and paging fires 10 posts from the end, so
+     * this has to cover a full page (~20 posts) of already-loaded rows first. */
+    public boolean scrollUntilLoadMoreErrorVisible(int maxSwipes) {
+        for (int i = 0; i < maxSwipes; i++) {
+            if (isLoadMoreErrorVisible()) {
+                return true;
+            }
+            swipeUp();
+        }
+        return isLoadMoreErrorVisible();
+    }
+
+    public boolean isLoadMoreErrorVisible() {
+        return !visibleElements(loadMoreError).isEmpty();
+    }
+
+    public boolean isLoadMoreRetryVisible() {
+        return !visibleElements(loadMoreRetry).isEmpty();
+    }
+
+    public boolean tapLoadMoreRetry() {
+        return tapFirstVisible(loadMoreRetry);
+    }
+
+    /** Waits for the footer to disappear without any tap: the app's reconnect handler
+     * re-requests the failed page by itself. */
+    public boolean waitForLoadMoreErrorGone() {
+        try {
+            return new WebDriverWait(driver, RECONNECT_TIMEOUT)
+                    .until(ignored -> !isLoadMoreErrorVisible());
+        } catch (RuntimeException timedOut) {
+            return false;
+        }
+    }
+
     /**
      * iOS has no system Back: repeats the in-app back gesture/controls across whatever screens
      * that reaches, then re-activates the app to confirm it recovers rather than staying
