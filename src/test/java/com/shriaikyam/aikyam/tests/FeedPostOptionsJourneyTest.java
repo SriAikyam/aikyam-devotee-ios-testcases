@@ -15,7 +15,8 @@ import org.junit.runners.MethodSorters;
  *
  * TC362/TC363 cover iOS PR #695 (Show less / Show more now send the affinity signal and keep
  * the post on screen). They run in name order so the Show more of TC363 offsets the Show less
- * signal TC362 sent for the same top post.
+ * signal TC362 sent for the same top post. Both send real affinity signals for the test
+ * account on the dev backend, so run them against dev only.
  *
  * TC364 covers iOS PR #704 (Hide all posts from this account). It only checks the option is
  * offered: hiding an account cannot be undone from the app (no unhide, as on Android), and

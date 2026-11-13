@@ -66,12 +66,6 @@ public class PriestPage extends BasePage {
                         + " OR label ENDSWITH " + suffix + ")");
     }
 
-    /** Temple context without assuming the role's full tab set: a TEMPLE_ADMIN account
-     * (iOS #658) gets Temple / Orders / Events only, no Services or Apps. */
-    public boolean isTempleBottomNavVisible() {
-        return isAnyVisible(temple) && isAnyVisible(orders) && isAnyVisible(events);
-    }
-
     public boolean isPriestBottomNavVisible() {
         return isAnyVisible(temple) && isAnyVisible(orders) && isAnyVisible(events)
                 && isAnyVisible(services) && isAnyVisible(apps);
@@ -163,49 +157,5 @@ public class PriestPage extends BasePage {
     private boolean isTabSelected(By tab) {
         List<WebElement> matches = driver.findElements(tab);
         return !matches.isEmpty() && "true".equals(matches.get(0).getAttribute("selected"));
-    }
-
-    // iOS PR "edit the temple profile from the temple account" (TempleAccountHomeView,
-    // TempleProfileFormSheets).
-    private final By avatarEdit = id("temple.avatar.edit");
-    private final By bannerEdit = id("temple.banner.edit");
-    private final By historyEdit = id("temple.history.edit");
-    private final By historyField = id("temple.history.field");
-    private final By historyCounter = id("temple.history.counter");
-    private final By historySave = id("temple.history.save");
-    private final By sheetBack = AppiumBy.iOSNsPredicateString(
-            "type == 'XCUIElementTypeButton' AND name == 'chevron.backward'");
-
-    public boolean areProfileEditControlsVisible() {
-        return isAnyVisible(avatarEdit) && isAnyVisible(bannerEdit) && isAnyVisible(historyEdit);
-    }
-
-    public boolean openHistoryEditor() {
-        return tapFirstVisible(historyEdit) && isAnyVisible(historyField);
-    }
-
-    public boolean isHistorySaveEnabled() {
-        return visibleElements(historySave).stream().anyMatch(WebElement::isEnabled);
-    }
-
-    /** "<length> / 5,000". */
-    public String historyCounterText() {
-        List<WebElement> counters = visibleElements(historyCounter);
-        return counters.isEmpty() ? "" : counters.get(0).getAttribute("label");
-    }
-
-    /** Appends text without saving. */
-    public boolean typeIntoHistory(String text) {
-        List<WebElement> fields = visibleElements(historyField);
-        if (fields.isEmpty()) {
-            return false;
-        }
-        fields.get(0).sendKeys(text);
-        return true;
-    }
-
-    /** Leaves the editor through its back button; nothing is saved. */
-    public boolean closeHistoryEditor() {
-        return tapFirstVisible(sheetBack) && waitUntilGone(historyField);
     }
 }

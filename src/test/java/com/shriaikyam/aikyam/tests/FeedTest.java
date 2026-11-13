@@ -249,12 +249,11 @@ public class FeedTest extends BaseTest {
         );
     }
 
-    /** iOS PR #701: paging follows the server's hasMore, not how many posts survived the
-     * special-card filter. A special-card-only page can't be forced from the UI (the PR's
-     * unit tests cover that), so this checks the end-to-end symptom: deep into the feed, a
-     * swipe still brings new posts instead of hitting a false end. */
+    /** Smoke check only: deep into the feed, the list still scrolls. After 30 swipes there
+     * may still be loaded posts below, so this does not prove paging continued and is not
+     * coverage for iOS PR #701 (its unit tests cover the hasMore / special-card-only page). */
     @Test
-    public void TC365_Verify_Feed_Keeps_Paging_Deep_Into_Timeline() {
+    public void TC365_Verify_Feed_Still_Scrolls_Deep_Into_Timeline() {
         FeedPage feedPage = new FeedPage(driver);
 
         feedPage.waitUntilLoaded();

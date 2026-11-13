@@ -252,21 +252,4 @@ public class SettingsPage extends BasePage {
         return AppiumBy.iOSClassChain("**/XCUIElementTypeAlert/**/XCUIElementTypeButton[`label == "
                 + predicateLiteral(label).replace('\'', '"') + "`]");
     }
-
-    /** iOS PR #658: the temple-role switcher (PriestSettingsView) lists every linked temple
-     * as a row `priest.settings.account.temple.<templeId>`. Returns the temple ids shown,
-     * in order and with any repeats, once the list (fed by users/profiles) has loaded. */
-    public List<String> listedTempleAccountIds() {
-        By rows = AppiumBy.iOSNsPredicateString("name BEGINSWITH 'priest.settings.account.temple.'");
-        if (!isAnyVisible(rows)) {
-            return List.of();
-        }
-        return visibleElements(rows).stream()
-                .map(row -> row.getAttribute("name").substring("priest.settings.account.temple.".length()))
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    public boolean switchToTempleAccountById(String templeId) {
-        return tapFirstVisible(id("priest.settings.account.temple." + templeId));
-    }
 }

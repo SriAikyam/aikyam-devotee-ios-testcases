@@ -265,6 +265,12 @@ public class FeedPage {
             } catch (RuntimeException transientFailure) {
                 // Source fetch raced a re-render; poll again.
             }
+            try {
+                Thread.sleep(200); // short enough to catch the ~2.5s toast, easier on Appium
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
         return false;
     }
