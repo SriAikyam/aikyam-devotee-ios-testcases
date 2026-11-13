@@ -328,7 +328,11 @@ public class FeedPage {
         if (comment == null) {
             throw new IllegalStateException("No Comment action visible on the feed");
         }
-        String count = countFromLabel(comment.getAttribute("label"));
+        // The count is the button's accessibility value; its label is a fixed "Comments".
+        String value = comment.getAttribute("value");
+        String count = value != null && COUNT.matcher(value.trim()).matches()
+                ? value.trim()
+                : countFromLabel(comment.getAttribute("label"));
         String digits = count.replaceAll("[^0-9]", "");
         return digits.isEmpty() ? 0 : Integer.parseInt(digits);
     }
