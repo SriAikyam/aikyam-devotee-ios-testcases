@@ -506,4 +506,176 @@ public class NotificationJourneyTest extends BaseTest {
         Assert.assertTrue("Music tab must be active",
                 new MusicPage(driver).isMusicScreenVisible());
     }
+
+    // =========================================================================
+    // TC309-TC314: edge cases introduced or fixed by PR #698
+    // =========================================================================
+
+    /**
+     * screen="store" (legacy alias) → Explore tab, not Events tab.
+     *
+     * Before PR #698 NotificationHandler mapped "explore" to .tab(2) (Events) and
+     * "store" had the same wrong mapping. Both now use MainTabView.exploreTabId (3)
+     * so this legacy push category opens the correct screen.
+     *
+     * Distinct from TC280 (screen="explore") which verifies the primary value —
+     * this test covers the "store" alias which many older push campaigns still send.
+     */
+    @Test
+    public void TC309_Notify_Screen_Store_Legacy_Alias_Switches_To_Explore_Tab() {
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "Find temples near you",
+                DeepLinkPage.payload("screen", "store"),
+                "Find temples near you", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        Assert.assertTrue("screen=store (legacy alias) must switch to Explore tab (tab 3), not Events",
+                new ExplorePage(driver).isExploreVisible());
+        Assert.assertFalse("No Back button — Explore is a tab switch",
+                links.isShown(links.byDesc("Back")));
+        // Guard: Events tab must NOT be open (the pre-fix wrong mapping routed here).
+        Assert.assertFalse("Events tab must NOT be active for screen=store",
+                new EventsPage(driver).isEventsScreenVisible());
+    }
+
+    /**
+     * Tab-switch deeplink (aikyam://music) in notification payload with screen="explore".
+     * deeplink=aikyam://music is a tab-only destination (tabIndex only, no appRoute, no
+     * musicDeepLink), so it is not specific enough to override the notification's screen
+     * field. The screen field wins → Explore tab.
+     *
+     * Fixed by PR #698 commit "fix(notifications): tab-switch deeplinks fall through to
+     * screen field". Before the fix, the tabIndex early return in
+     * resolveNavigationDestination meant aikyam://music switched to the Music tab even
+     * when the backend intended screen="explore".
+     *
+     * This is intentionally different from TC298 where deeplink=aikyam://streams/{id}
+     * IS specific enough (it has an appRoute / .liveStream destination) to win over
+     * the screen field.
+     */
+    @Test
+    public void TC310_Notify_Tab_Switch_Deeplink_Yields_To_Screen_Field() {
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "Open Explore",
+                DeepLinkPage.payload("deeplink", "aikyam://music", "screen", "explore"),
+                "Open Explore", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        // screen="explore" must win — Explore tab, not Music tab.
+        Assert.assertTrue("screen=explore must win over deeplink=aikyam://music (tab-only link)",
+                new ExplorePage(driver).isExploreVisible());
+        Assert.assertFalse("Music tab must NOT be active",
+                new MusicPage(driver).isMusicScreenVisible());
+        Assert.assertFalse("No Back button — Explore is a tab switch",
+                links.isShown(links.byDesc("Back")));
+    }
+
+    /**
+     * postId always wins regardless of the screen field value — even non-feed screens.
+     *
+     * iOS bug (pre-PR #698): NotificationHandler.resolveNavigationDestination gated
+     * postId routing on `screen ∈ {shared_post, feed, post, post_detail}`. When screen
+     * was set to any other value (e.g., "settings", "community_post") the postId was
+     * silently dropped and the screen field was used instead.
+     *
+     * Android always routes to post when postId is present, regardless of screen.
+     * The fix removes the screen conditional — postId always takes priority.
+     *
+     * Test: postId=doesnotexist123 with screen="settings" → post load error screen
+     * (not the Apps/Settings tab, which is what the old code would have shown).
+     */
+    @Test
+    public void TC311_Notify_PostId_Always_Wins_Regardless_Of_Screen_Field() {
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "Someone liked your post",
+                DeepLinkPage.payload("postId", "doesnotexist123", "screen", "settings"),
+                "Someone liked your post", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        // Post load error (or post detail) must show, NOT the Apps/Settings tab.
+        Assert.assertTrue("postId must win over screen=settings; post error or detail must show",
+                links.waitForText("Unable to load this shared post.", LAND)
+                        || links.waitFor(links.byDesc("Back"), LAND));
+        Assert.assertFalse("Apps tab must NOT be active — postId took priority",
+                new AppsPage(driver).isAppsScreenVisible());
+    }
+
+    /**
+     * postId always wins regardless of screen="events" (another non-feed screen).
+     *
+     * Guards against regression to the pre-PR #698 iOS-specific gating logic.
+     * Pairs with TC311 to cover two distinct non-feed screen values.
+     */
+    @Test
+    public void TC312_Notify_PostId_Wins_Over_Screen_Events() {
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "Post update",
+                DeepLinkPage.payload("postId", "doesnotexist123", "screen", "events"),
+                "Post update", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        Assert.assertTrue("postId must win over screen=events; post error or detail must show",
+                links.waitForText("Unable to load this shared post.", LAND)
+                        || links.waitFor(links.byDesc("Back"), LAND));
+        Assert.assertFalse("Events tab must NOT be active — postId took priority",
+                new EventsPage(driver).isEventsScreenVisible());
+    }
+
+    /**
+     * deeplink="aikyam://streams/{id}" in notification payload takes priority over
+     * screen field, even when screen is a valid non-community value.
+     *
+     * iOS bug (pre-PR #698): when screen was set to something other than nil, the
+     * deeplink field was only tried as a last resort (after all other checks returned
+     * nil). Android tries aikyam:// deeplinks BEFORE the screen fallback.
+     *
+     * Fixed in PR #698: extract streamId from aikyam://streams/<id> in the deeplink
+     * field and return .liveStream before falling to the screen handler.
+     *
+     * Test: deeplink=aikyam://streams/{ISKCON_id} with screen="explore" →
+     * stream player opens, NOT the Explore tab.
+     */
+    @Test
+    public void TC313_Notify_Stream_Deeplink_Wins_Over_Non_Community_Screen_Field() {
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "Live stream now",
+                DeepLinkPage.payload(
+                        "deeplink", "aikyam://streams/" + TestData.STREAM_VIDEO_ID_ISKCON,
+                        "screen", "explore"),
+                "Live stream now", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        // Stream player must open — deeplink takes priority over screen="explore".
+        Assert.assertTrue("Stream player must open (deeplink wins over screen=explore)",
+                links.waitFor(links.byDesc("Back"), LAND)
+                        || links.waitFor(links.byDesc("Close"), LAND));
+        Assert.assertFalse("Explore tab must NOT be active",
+                new ExplorePage(driver).isExploreVisible());
+        Assert.assertFalse("Home feed must not be showing — stream player is open",
+                links.isHomeFeedShown(Duration.ofSeconds(3)));
+    }
+
+    /**
+     * liveId notification for a priest temple account — stream still opens directly
+     * in the player (not routed to Orders tab via the shared tab index).
+     *
+     * PR #698 guards tab-switch links for priests, but liveId routing uses
+     * resolveStream / routeDeepLink (not the tab-switch path), so it must work for
+     * priests too — the stream player opens directly.
+     *
+     * Skipped: requires a dedicated priest temple test account and a temple context
+     * switch. Verify manually using the QA priest account in the Notion test accounts.
+     */
+    @Ignore("Requires dedicated priest temple test account — verify manually")
+    @Test
+    public void TC314_Notify_LiveId_Opens_Stream_Player_For_Priest_Temple_Account() {
+        // Switch to temple context via Settings → Account switcher.
+        // Fire liveId notification.
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "ISKCON live",
+                DeepLinkPage.payload("liveId", TestData.STREAM_VIDEO_ID_ISKCON),
+                "ISKCON live", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        Assert.assertTrue("Stream player must open for priest temple account too",
+                links.waitFor(links.byDesc("Back"), LAND)
+                        || links.waitFor(links.byDesc("Close"), LAND));
+        Assert.assertFalse("Home feed must not be showing — stream player is open",
+                links.isHomeFeedShown(Duration.ofSeconds(3)));
+        Assert.fail("Not implemented — requires priest temple context setup");
+    }
 }
