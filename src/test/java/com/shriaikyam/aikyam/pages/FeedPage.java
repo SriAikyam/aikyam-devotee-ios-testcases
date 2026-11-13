@@ -1,5 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
+import com.shriaikyam.aikyam.utils.DeviceControl;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.junit.AssumptionViolatedException;
@@ -8,6 +9,7 @@ import org.openqa.selenium.Dimension;
 import org.openqa.selenium.Point;
 import org.openqa.selenium.Rectangle;
 import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.PointerInput;
 import org.openqa.selenium.interactions.Sequence;
@@ -185,24 +187,31 @@ public class FeedPage {
     private final By airplaneModeSwitch = AppiumBy.iOSNsPredicateString(
             "type == 'XCUIElementTypeSwitch' AND (name == 'Airplane Mode' OR label == 'Airplane Mode')");
 
-    /** Physical iPhone: flips the Airplane Mode switch in the Settings app, then brings the
-     * app back. WebDriverAgent talks to the phone over USB, so the session survives going
-     * offline.
+    /** Opt-in property for the offline cases. They flip Airplane Mode and swipe up to 40
+     * times each, so a normal full run on the phone (p1Rest included) must not pick them up. */
+    public static final String OFFLINE_OPT_IN = "feed.offline";
+
+    /** Physical iPhone with -Dfeed.offline=true: flips the Airplane Mode switch in the
+     * Settings app, then brings the app back. WebDriverAgent talks to the phone over USB, so
+     * the session survives going offline.
      *
-     * Simulator and BrowserStack: XCUITest has no network control there. Enabling skips the
-     * calling test instead of letting it pass against a still-online app; disabling is a
-     * no-op so teardown stays safe.
-     *
-     * Disabling is a no-op unless this run turned Airplane mode on, so FeedTest's @After can
-     * call it after every test without a Settings round trip each time. */
+     * Enabling SKIPS the calling test on a simulator or BrowserStack (XCUITest has no network
+     * control there), and on a device without the opt-in. Disabling is a no-op unless this
+     * run turned Airplane Mode on, so FeedTest's @After can call it after every test without
+     * a Settings round trip, and a phone someone left in Airplane Mode on purpose is not
+     * switched back by a test that found it already on. */
     public void setAirplaneMode(boolean enabled) {
-        if (!isPhysicalDevice()) {
+        if (DeviceControl.isSimulator()) {
             if (enabled) {
                 throw new AssumptionViolatedException(
                         "iOS: network cannot be toggled through XCUITest on a simulator; "
                                 + "offline scenario runs on a physical iPhone only");
             }
             return;
+        }
+        if (enabled && !Boolean.getBoolean(OFFLINE_OPT_IN)) {
+            throw new AssumptionViolatedException("Offline scenario: opt in with -D"
+                    + OFFLINE_OPT_IN + "=true on a USB-connected physical iPhone");
         }
         if (!enabled && !airplaneModeTurnedOnByTest) {
             return;
@@ -217,9 +226,8 @@ public class FeedPage {
                     .until(ignored -> firstVisibleAction(List.of(airplaneModeSwitch)));
             if (isSwitchOn(toggle) != enabled) {
                 // Set before the tap: if the wait below times out the switch may still have
-                // flipped, and teardown must then turn it back off. (When disabling, the
-                // flag only clears after the switch is confirmed off, so a failed attempt
-                // is retried by teardown.)
+                // flipped, and teardown must then turn it back off. When disabling, the flag
+                // only clears once the switch is confirmed off, so teardown retries a failure.
                 if (enabled) {
                     airplaneModeTurnedOnByTest = true;
                 }
@@ -229,7 +237,11 @@ public class FeedPage {
                     return current != null && isSwitchOn(current) == enabled;
                 });
             }
-            airplaneModeTurnedOnByTest = enabled;
+            // Enabling a switch that was already on leaves the flag alone: this run did not
+            // turn it on, so teardown must not turn it off.
+            if (!enabled) {
+                airplaneModeTurnedOnByTest = false;
+            }
         } finally {
             driver.activateApp(bundleId());
         }
@@ -243,23 +255,24 @@ public class FeedPage {
      * on. airplaneModeTurnedOnByTest lives in memory only, so a run killed while offline
      * (Ctrl-C, crash) would otherwise leave every test of every later run offline. Reads the
      * real switch in Settings; a no-op on a simulator or BrowserStack. Called from
-     * BaseTest.setUp. */
+     * BaseTest.setUp for every class, so it must never fail setup: a check that can't read
+     * the switch (non-English phone, Settings slow to open) is logged and skipped, and the
+     * flag is reset so FeedTest's @After doesn't retry it after every test. */
     public void turnOffAirplaneModeLeftOnByAnEarlierRun() {
-        if (!isPhysicalDevice() || airplaneModeCheckedThisRun) {
+        if (DeviceControl.isSimulator() || airplaneModeCheckedThisRun) {
             return;
         }
         airplaneModeCheckedThisRun = true;
         // Forces setAirplaneMode(false) past its "only if we turned it on" shortcut.
         airplaneModeTurnedOnByTest = true;
-        setAirplaneMode(false);
-    }
-
-    /** Matches BaseTest: a local run is on a physical iPhone exactly when WebDriverAgent is
-     * signed with our team (appium.xcodeOrgId); BrowserStack runs pass appium.bstackApp. */
-    private static boolean isPhysicalDevice() {
-        String teamId = System.getProperty("appium.xcodeOrgId");
-        String bstackApp = System.getProperty("appium.bstackApp");
-        return teamId != null && !teamId.isBlank() && (bstackApp == null || bstackApp.isBlank());
+        try {
+            setAirplaneMode(false);
+        } catch (RuntimeException couldNotCheck) {
+            airplaneModeTurnedOnByTest = false;
+            System.out.println("[airplane-mode] could not check the Airplane Mode switch at the "
+                    + "start of the run; carrying on. If the phone is offline, turn Airplane "
+                    + "Mode off by hand. Cause: " + couldNotCheck);
+        }
     }
 
     private static boolean isSwitchOn(WebElement toggle) {
@@ -304,7 +317,23 @@ public class FeedPage {
     }
 
     public boolean isLoadMoreErrorVisible() {
-        return !visibleElements(loadMoreError).isEmpty();
+        try {
+            return loadMoreErrorShown();
+        } catch (StaleElementReferenceException reRendered) {
+            return false;
+        }
+    }
+
+    /** Not visibleElements(): that swallows every error as "nothing visible", so a dropped
+     * session would read as "the footer stayed gone" and pass TC382. This lets anything but
+     * a stale element (a SwiftUI re-render; the waits below retry it) propagate. */
+    private boolean loadMoreErrorShown() {
+        driver.manage().timeouts().implicitlyWait(Duration.ZERO);
+        try {
+            return driver.findElements(loadMoreError).stream().anyMatch(WebElement::isDisplayed);
+        } finally {
+            driver.manage().timeouts().implicitlyWait(IMPLICIT_TIMEOUT);
+        }
     }
 
     public boolean isLoadMoreRetryVisible() {
@@ -321,15 +350,17 @@ public class FeedPage {
     public boolean waitForLoadMoreErrorGoneForGood() {
         try {
             new WebDriverWait(driver, RECONNECT_TIMEOUT)
-                    .until(ignored -> !isLoadMoreErrorVisible());
-        } catch (RuntimeException neverCleared) {
+                    .ignoring(StaleElementReferenceException.class)
+                    .until(ignored -> !loadMoreErrorShown());
+        } catch (TimeoutException neverCleared) {
             return false;
         }
         try {
             new WebDriverWait(driver, FOOTER_STAYS_GONE)
-                    .until(ignored -> isLoadMoreErrorVisible());
+                    .ignoring(StaleElementReferenceException.class)
+                    .until(ignored -> loadMoreErrorShown());
             return false;
-        } catch (RuntimeException stayedGone) {
+        } catch (TimeoutException stayedGone) {
             return true;
         }
     }
@@ -339,7 +370,7 @@ public class FeedPage {
     public boolean didFeedChangeFrom(String previousFeedState) {
         try {
             return didFeedScroll(previousFeedState);
-        } catch (RuntimeException unchanged) {
+        } catch (TimeoutException unchanged) {
             return false;
         }
     }

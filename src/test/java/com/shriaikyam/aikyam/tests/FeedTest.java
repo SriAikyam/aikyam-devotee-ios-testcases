@@ -238,9 +238,11 @@ public class FeedTest extends BaseTest {
     }
 
     // ---- Load-more failure and retry (aikyam-devotee-ios#712) ----
-    // All three go offline through setAirplaneMode, which skips them where the network
-    // can't be toggled (the iOS simulator). The posts already on screen stay loaded, so
-    // going offline after waitUntilLoaded() makes the NEXT page the one that fails.
+    // All three go offline through setAirplaneMode, which skips them on a simulator or
+    // BrowserStack (no network control) and on a physical iPhone unless the run opts in with
+    // -Dfeed.offline=true, so a normal full run (p1Rest) doesn't flip Airplane Mode. The
+    // posts already on screen stay loaded, so going offline after waitUntilLoaded() makes
+    // the NEXT page the one that fails.
 
     private static final int SWIPES_TO_PAGE_END = 40;
 

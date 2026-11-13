@@ -150,6 +150,8 @@ tasks.test {
         "appium.bstackBuild",
         "appium.bstackSession",
         "appium.bstackLogin",
+        // Opt-in for the offline FeedTest cases (Airplane Mode on a physical iPhone).
+        "feed.offline",
     ).forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
