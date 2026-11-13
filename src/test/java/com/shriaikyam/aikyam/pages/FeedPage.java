@@ -326,14 +326,14 @@ public class FeedPage {
 
     /** Not visibleElements(): that swallows every error as "nothing visible", so a dropped
      * session would read as "the footer stayed gone" and pass TC382. This lets anything but
-     * a stale element (a SwiftUI re-render; the waits below retry it) propagate. */
+     * a stale element (a SwiftUI re-render; the waits below retry it) propagate.
+     *
+     * Sets the implicit wait to zero and leaves it there: zero is the session default
+     * (BaseTest.IMPLICIT_WAIT). Setting it explicitly rather than assuming it, because
+     * visibleElements() restores it to IMPLICIT_TIMEOUT (5s) after every call. */
     private boolean loadMoreErrorShown() {
         driver.manage().timeouts().implicitlyWait(Duration.ZERO);
-        try {
-            return driver.findElements(loadMoreError).stream().anyMatch(WebElement::isDisplayed);
-        } finally {
-            driver.manage().timeouts().implicitlyWait(IMPLICIT_TIMEOUT);
-        }
+        return driver.findElements(loadMoreError).stream().anyMatch(WebElement::isDisplayed);
     }
 
     public boolean isLoadMoreRetryVisible() {
