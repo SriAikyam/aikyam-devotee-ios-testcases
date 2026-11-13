@@ -30,17 +30,27 @@ public class DeepLinkPage extends BasePage {
     }
 
     /** The simulator cannot verify universal links, so https share links are fired as the
-     * equivalent aikyam:// URL, which ShareLinkRouter routes identically. */
+     * equivalent aikyam:// URL, which ShareLinkRouter routes identically.
+     *
+     * Uses Appium's mobile: deepLink command which works on both real devices and
+     * simulators (XCUITest driver ≥ 4.x). Falls back to xcrun simctl openurl on
+     * older driver versions where the mobile command is unavailable. */
     public boolean fire(String url) {
         String link = url.replaceFirst("^https?://[^/]+/", "aikyam://");
-        String udid = System.getProperty("appium.udid", "booted");
         try {
-            Process p = new ProcessBuilder("xcrun", "simctl", "openurl", udid, link)
-                    .redirectErrorStream(true).start();
-            p.getInputStream().readAllBytes();
-            return p.waitFor() == 0;
-        } catch (java.io.IOException | InterruptedException e) {
-            return false;
+            driver.executeScript("mobile: deepLink", Map.of("url", link, "bundleId", DEV_BUNDLE_ID));
+            return true;
+        } catch (RuntimeException mobileDeepLinkUnsupported) {
+            // Fall back to simctl for simulator-only environments with older driver versions.
+            String udid = System.getProperty("appium.udid", "booted");
+            try {
+                Process p = new ProcessBuilder("xcrun", "simctl", "openurl", udid, link)
+                        .redirectErrorStream(true).start();
+                p.getInputStream().readAllBytes();
+                return p.waitFor() == 0;
+            } catch (java.io.IOException | InterruptedException e) {
+                return false;
+            }
         }
     }
 
