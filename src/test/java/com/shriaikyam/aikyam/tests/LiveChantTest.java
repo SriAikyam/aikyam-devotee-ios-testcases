@@ -1,13 +1,14 @@
 package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.LiveChantPage;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.AssumptionViolatedException;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -19,20 +20,17 @@ import java.time.Instant;
 import java.util.function.BooleanSupplier;
 
 /**
- * Live Chant on iOS: every Android scenario from aikyam-devotee-android-testcases
- * (Appium TC355-TC357 on test/live-chant-appium-scenarios, and the .maestro/regression/live_chant_*
- * flows), updated for the app's waiting step: Start Live Chant -> Start -> Waiting -> host taps
- * Start Chant -> LIVE.
+ * Live Chant on iOS: the Android Live Chant scenarios, with the app's waiting step:
+ * Start Live Chant -> Start -> Waiting -> host taps Start Chant -> LIVE.
  *
- * Needs the dev build of aikyam-devotee-ios feature/live-chant-ios, logged in, and the japa track
- * (Gayatri Mantra, or -Dlivechant.japaTrack) on Music home; otherwise the tests fail. "Live Chant as a participant" needs a
- * second logged-in device and is covered by unit tests, as on Android.
+ * Needs a logged-in dev build with Live Chant, and the japa track (Gayatri Mantra, or
+ * -Dlivechant.japaTrack) on Music home. "Live Chant as a participant" needs a second logged-in
+ * device and is covered by unit tests, as on Android.
  */
 public class LiveChantTest extends BaseTest {
 
     private static final String JAPA_TRACK = System.getProperty("livechant.japaTrack", "Gayatri Mantra");
     private static final String OTHER_TRACK = System.getProperty("livechant.otherTrack", "Shiva Tandav Stotram");
-    private static final Duration WAIT = Duration.ofSeconds(30);
 
     private LiveChantPage chant;
 
@@ -48,6 +46,8 @@ public class LiveChantTest extends BaseTest {
         public void evaluate() throws Throwable {
             try {
                 base.evaluate();
+            } catch (AssumptionViolatedException skipped) {
+                throw skipped; // a skip is not a failure: no diagnostics
             } catch (Throwable failure) {
                 captureFailureDiagnostics(Description.createTestDescription(
                         description.getTestClass(), description.getMethodName() + "_before_cleanup"), failure);
@@ -61,7 +61,7 @@ public class LiveChantTest extends BaseTest {
     @Before
     public void enterMusic() {
         chant = new LiveChantPage(driver);
-        endOwnChantIfAny(); // a chant left by an earlier failed run would block Start (ACTIVE_SESSION_EXISTS)
+        endChantIfStillLive(); // a chant left by an earlier failed run would block Start (ACTIVE_SESSION_EXISTS)
         Assume.assumeTrue("Skipping: the Music tab is not reachable (not logged in?)", chant.openMusicTab());
     }
 
@@ -99,6 +99,12 @@ public class LiveChantTest extends BaseTest {
         Assert.assertTrue("The sheet should close", chant.isSheetGone());
         Assert.assertTrue("Still on the normal player", chant.isPlayerVisible());
         Assert.assertFalse("No Live Chant screen", chant.isEndVisible());
+
+        // Nothing started anywhere: Music home has no Live now card and no LIVE mini player.
+        chant.closePlayerIfOpen();
+        Assert.assertTrue("The Music tab should open", chant.openMusicTab());
+        Assert.assertNull("No Live now card for " + JAPA_TRACK, chant.cardAction(JAPA_TRACK));
+        Assert.assertFalse("The mini player is not LIVE", chant.isMiniPlayerLive());
     }
 
     /** Maestro live_chant_host_controls.yaml (the keep-screen-on toggle is gone: the screen always stays on). */
@@ -133,7 +139,7 @@ public class LiveChantTest extends BaseTest {
         Assert.assertTrue("Who is chanting should open", chant.openParticipants());
         Assert.assertTrue("'Chanting now' sheet should open", chant.isWhoSheetVisible());
         Assert.assertTrue("The host is tagged in the list", chant.isHostTagVisible());
-        chant.navigateBackFromSheet();
+        Assert.assertTrue("The 'Chanting now' sheet should close", chant.closeWhoSheet());
         Assert.assertTrue("Still on the Live Chant screen", chant.isScreenVisible());
 
         endChantFromScreen();
@@ -194,11 +200,12 @@ public class LiveChantTest extends BaseTest {
     }
 
     /** Android TC356: a real network handover. XCUITest can't toggle Wi-Fi (Android uses `adb svc wifi`),
-     * and a simulator shares the Mac's network. */
-    @Ignore("Not automatable on iOS - check by hand on a real iPhone: start a chant on Wi-Fi, turn Wi-Fi off,"
-            + " the chant reconnects on cellular and Pause/Resume still work")
+     * and a simulator shares the Mac's network. An Assume, not @Ignore: Gradle's JUnit XML keeps an
+     * assumption's message but drops an @Ignore reason, and the regression report lists skip reasons. */
     @Test
     public void TC356_Verify_Live_Chant_Survives_A_WiFi_To_Cellular_Switch() {
+        Assume.assumeTrue("Skipping: not automatable on iOS - check by hand on a real iPhone: start a chant on"
+                + " Wi-Fi, turn Wi-Fi off, the chant reconnects on cellular and Pause/Resume still work", false);
     }
 
     /**
@@ -267,12 +274,14 @@ public class LiveChantTest extends BaseTest {
     private void endOwnChantIfAny() {
         if (!chant.isEndVisible()) {
             chant.openMusicTab();
+            // Wait for the chant screen only after tapping into it; with nothing to end, return at once.
             if (chant.isMiniPlayerLive()) {
-                chant.tapMiniPlayerLive();
-            } else if ("Open".equals(chant.cardAction(JAPA_TRACK))) {
-                chant.tapCard(JAPA_TRACK);
+                if (chant.tapMiniPlayerLive()) {
+                    waitUntil(chant::isEndVisible);
+                }
+            } else if ("Open".equals(chant.cardAction(JAPA_TRACK)) && chant.tapCard(JAPA_TRACK)) {
+                waitUntil(chant::isEndVisible);
             }
-            waitUntil(chant::isEndVisible);
         }
         if (chant.isEndVisible() && chant.tapEnd()
                 && waitUntil(() -> LiveChantPage.END_TITLE.equals(chant.sheetTitle()))) {
@@ -283,7 +292,7 @@ public class LiveChantTest extends BaseTest {
 
     private String waitForCard(String trackTitle) {
         try {
-            return new WebDriverWait(driver, WAIT).until(ignored -> chant.cardAction(trackTitle));
+            return new WebDriverWait(driver, BasePage.DEFAULT_TIMEOUT).until(ignored -> chant.cardAction(trackTitle));
         } catch (TimeoutException timeout) {
             return null;
         }
@@ -291,7 +300,7 @@ public class LiveChantTest extends BaseTest {
 
     private boolean waitUntil(BooleanSupplier condition) {
         try {
-            return new WebDriverWait(driver, WAIT).until(ignored -> condition.getAsBoolean());
+            return new WebDriverWait(driver, BasePage.DEFAULT_TIMEOUT).until(ignored -> condition.getAsBoolean());
         } catch (TimeoutException timeout) {
             return false;
         }

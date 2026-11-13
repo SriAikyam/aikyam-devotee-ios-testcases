@@ -4,18 +4,18 @@ import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.remote.RemoteWebElement;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Live Chant (aikyam-devotee-ios branch feature/live-chant-ios, port of Android app PR #667).
- * Live Chant controls use the `livechant.*` identifiers from LiveChantViews.swift; getting to a
- * track uses visible labels (Music tab, track title, the player's "More options"), so these
- * tests run on a plain feature build without the `music.*` identifiers of qa/appium-ios-tests.
+ * Live Chant. Its controls use the app's `livechant.*` identifiers; getting to a track uses
+ * visible labels (Music tab, track title, the player's "More options").
  */
 public class LiveChantPage extends BasePage {
 
@@ -236,10 +236,17 @@ public class LiveChantPage extends BasePage {
         return tapFirstVisible(miniLive);
     }
 
-    /** Swipes a sheet down (no back button on an iOS sheet). */
-    public void navigateBackFromSheet() {
-        navigateBack();
-        waitUntilGone(whoTitle);
+    /** Swipes the "Chanting now" sheet down by its own title: an iOS sheet has no back button, and
+     * the generic navigateBack() could tap a control on the screen behind it. */
+    public boolean closeWhoSheet() {
+        try {
+            WebElement title = waitForAnyVisible(whoTitle);
+            driver.executeScript("mobile: swipe",
+                    Map.of("direction", "down", "elementId", ((RemoteWebElement) title).getId()));
+        } catch (RuntimeException notShown) {
+            return false;
+        }
+        return waitUntilGone(whoTitle);
     }
 
     /** The track tap opens the full player behind the switch sheet; close it to get back to Music home. */
