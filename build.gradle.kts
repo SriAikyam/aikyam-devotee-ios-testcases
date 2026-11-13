@@ -153,6 +153,10 @@ tasks.test {
     ).forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
+    // LiveChantTest's switches (-Dlivechant.long, .backgroundMinutes, .japaTrack, .otherTrack).
+    System.getProperties().stringPropertyNames()
+        .filter { it.startsWith("livechant.") }
+        .forEach { key -> systemProperty(key, System.getProperty(key)) }
 
     // Phase 4: when -Dappium.worker=N is supplied, this run is one shard of a parallel
     // execution and must not write into the shared, fixed result paths - two shards would
