@@ -4,7 +4,9 @@ import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -145,7 +147,7 @@ public class LiveChantPage extends BasePage {
     }
 
     public boolean isGone() {
-        return waitUntilGone(java.time.Duration.ofSeconds(15), end);
+        return waitUntilGone(Duration.ofSeconds(15), end);
     }
 
     public String titleText() {
@@ -185,7 +187,8 @@ public class LiveChantPage extends BasePage {
     }
 
     public boolean isHostTagVisible() {
-        return isAnyVisible(text("Host"), textContains("Host"));
+        // Exact label only: a CONTAINS match would also accept "Hosted by ..." or a name with "Host" in it.
+        return isAnyVisible(text("Host"));
     }
 
     /** Japa "repetition / target", or -1 when this chant isn't a japa. */
@@ -218,7 +221,7 @@ public class LiveChantPage extends BasePage {
     }
 
     public boolean isCardGone(String trackTitle) {
-        return waitUntilGone(java.time.Duration.ofSeconds(10), id("livechant.card." + trackTitle));
+        return waitUntilGone(Duration.ofSeconds(10), id("livechant.card." + trackTitle));
     }
 
     public boolean isMiniPlayerLive() {
@@ -236,7 +239,7 @@ public class LiveChantPage extends BasePage {
     /** Swipes a sheet down (no back button on an iOS sheet). */
     public void navigateBackFromSheet() {
         navigateBack();
-        waitUntilGone(id("livechant.who.title"));
+        waitUntilGone(whoTitle);
     }
 
     /** The track tap opens the full player behind the switch sheet; close it to get back to Music home. */
@@ -248,10 +251,10 @@ public class LiveChantPage extends BasePage {
         }
     }
 
-    /** Waits until `locator`'s label settles on `expected` (or times out). */
+    /** Waits until the badge's label settles on `expected` (or times out). */
     public boolean waitForBadge(String expected) {
         try {
-            new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(20))
+            new WebDriverWait(driver, Duration.ofSeconds(20))
                     .until(ignored -> expected.equals(labelOf(badge)));
             return true;
         } catch (RuntimeException timeout) {

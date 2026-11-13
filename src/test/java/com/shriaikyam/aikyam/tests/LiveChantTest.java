@@ -2,12 +2,20 @@ package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
 import com.shriaikyam.aikyam.pages.LiveChantPage;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
+import org.openqa.selenium.TimeoutException;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -17,21 +25,38 @@ import java.util.function.BooleanSupplier;
  * Start Chant -> LIVE.
  *
  * Needs the dev build of aikyam-devotee-ios feature/live-chant-ios, logged in, and the japa track
- * (Gayatri Mantra) on Music home; otherwise a test skips. "Live Chant as a participant" needs a
+ * (Gayatri Mantra, or -Dlivechant.japaTrack) on Music home; otherwise the tests fail. "Live Chant as a participant" needs a
  * second logged-in device and is covered by unit tests, as on Android.
  */
 public class LiveChantTest extends BaseTest {
 
-    private static final String JAPA_TRACK = "Gayatri Mantra";
+    private static final String JAPA_TRACK = System.getProperty("livechant.japaTrack", "Gayatri Mantra");
     private static final String OTHER_TRACK = System.getProperty("livechant.otherTrack", "Shiva Tandav Stotram");
+    private static final Duration WAIT = Duration.ofSeconds(30);
 
     private LiveChantPage chant;
 
-    /** Home reset uses tab.home, which only the qa/appium-ios-tests build has; this suite navigates by label. */
-    @Override
-    protected boolean shouldResetToHome() {
-        return false;
-    }
+    /**
+     * Never leave a chant running for other devotees if a step failed mid-way. A rule rather than
+     * an @After so a failure is captured BEFORE the chant is ended: BaseTest's diagnosticsWatcher
+     * only fires after @After, by which time the screen would show the cleaned-up state. Order 1
+     * puts this inside diagnosticsWatcher, so the driver is still alive here.
+     */
+    @Rule(order = 1)
+    public TestRule endChantAfterTest = (base, description) -> new Statement() {
+        @Override
+        public void evaluate() throws Throwable {
+            try {
+                base.evaluate();
+            } catch (Throwable failure) {
+                captureFailureDiagnostics(Description.createTestDescription(
+                        description.getTestClass(), description.getMethodName() + "_before_cleanup"), failure);
+                throw failure;
+            } finally {
+                endChantIfStillLive();
+            }
+        }
+    };
 
     @Before
     public void enterMusic() {
@@ -40,9 +65,10 @@ public class LiveChantTest extends BaseTest {
         Assume.assumeTrue("Skipping: the Music tab is not reachable (not logged in?)", chant.openMusicTab());
     }
 
-    /** Never leave a chant running for other devotees if a step failed mid-way. */
-    @After
-    public void endChantIfStillLive() {
+    private void endChantIfStillLive() {
+        if (chant == null) {
+            return; // setUp failed before the page existed
+        }
         try {
             endOwnChantIfAny();
         } catch (RuntimeException ignored) {
@@ -54,6 +80,12 @@ public class LiveChantTest extends BaseTest {
     public void TC355_Verify_Host_Starts_A_Live_Chant_From_The_Player_And_Ends_It() {
         startChantFromPlayer();
         endChantFromScreen();
+
+        // The screen closing is not proof the chant ended: Music home must drop it too.
+        chant.closePlayerIfOpen();
+        Assert.assertTrue("The Music tab should open", chant.openMusicTab());
+        Assert.assertTrue("The Live now card should be gone", chant.isCardGone(JAPA_TRACK));
+        Assert.assertTrue("Mini player is no longer LIVE", chant.isMiniPlayerLiveGone());
     }
 
     /** Maestro live_chant_start_cancel.yaml. */
@@ -77,9 +109,8 @@ public class LiveChantTest extends BaseTest {
         String startedBy = chant.startedByText();
         Assert.assertTrue("The chant shows who started it (was " + startedBy + ")",
                 startedBy != null && startedBy.startsWith("Started by "));
-        if (chant.isJapaVisible()) {
-            Assert.assertTrue("The japa counter starts at the first repetition", chant.japaRepetition() >= 1);
-        }
+        Assert.assertTrue(JAPA_TRACK + " is a japa track, so the counter should show", chant.isJapaVisible());
+        Assert.assertTrue("The japa counter starts at the first repetition", chant.japaRepetition() >= 1);
 
         Assert.assertEquals("Pause is offered while live", "Pause", chant.primaryText());
         Assert.assertTrue("Pause should be tappable", chant.tapPrimary());
@@ -142,7 +173,8 @@ public class LiveChantTest extends BaseTest {
         startChantFromPlayer();
         Assert.assertTrue("Back should collapse the Live Chant screen", chant.tapBack() && chant.isGone());
 
-        Assume.assumeTrue("Skipping: " + OTHER_TRACK + " is not on Music home", chant.openTrack(OTHER_TRACK));
+        Assert.assertTrue(OTHER_TRACK + " should be on Music home (change it with -Dlivechant.otherTrack)",
+                chant.openTrack(OTHER_TRACK));
         Assert.assertTrue("Asked to end the chant first",
                 waitUntil(() -> LiveChantPage.SWITCH_TITLE.equals(chant.sheetTitle())));
         Assert.assertEquals("The sheet warns it ends for everyone", LiveChantPage.END_BODY, chant.sheetBody());
@@ -161,12 +193,12 @@ public class LiveChantTest extends BaseTest {
         Assert.assertTrue("Mini player is no longer LIVE", chant.isMiniPlayerLiveGone());
     }
 
-    /** Android TC356: a real network handover. A simulator shares the Mac's network and can't switch. */
+    /** Android TC356: a real network handover. XCUITest can't toggle Wi-Fi (Android uses `adb svc wifi`),
+     * and a simulator shares the Mac's network. */
+    @Ignore("Not automatable on iOS - check by hand on a real iPhone: start a chant on Wi-Fi, turn Wi-Fi off,"
+            + " the chant reconnects on cellular and Pause/Resume still work")
     @Test
     public void TC356_Verify_Live_Chant_Survives_A_WiFi_To_Cellular_Switch() {
-        // XCUITest can't toggle Wi-Fi (Android uses `adb svc wifi`), and a simulator shares the Mac's network.
-        Assume.assumeTrue("Skipping: not automatable on iOS - check by hand on a real iPhone: start a chant on"
-                + " Wi-Fi, turn Wi-Fi off, the chant reconnects on cellular and Pause/Resume still work", false);
     }
 
     /**
@@ -179,9 +211,15 @@ public class LiveChantTest extends BaseTest {
         Assume.assumeTrue("Skipping: long test, run with -Dlivechant.long=true", Boolean.getBoolean("livechant.long"));
         int minutes = Integer.getInteger("livechant.backgroundMinutes", 30);
         startChantFromPlayer();
-        for (int minute = 0; minute < minutes; minute++) {
-            driver.runAppInBackground(java.time.Duration.ofSeconds(60)); // also keeps the Appium session alive
-        }
+        // -1 keeps the app in the background until activateApp. A loop of runAppInBackground(60s) would
+        // bring it back every minute, so iOS would never suspend it for the full period.
+        driver.runAppInBackground(Duration.ofSeconds(-1));
+        Instant backAt = Instant.now().plus(Duration.ofMinutes(minutes));
+        new WebDriverWait(driver, Duration.ofMinutes(minutes + 2), Duration.ofSeconds(60)).until(ignored -> {
+            driver.queryAppState(bundleId()); // one command a minute keeps the Appium session alive
+            return !Instant.now().isBefore(backAt);
+        });
+        driver.activateApp(bundleId());
         Assert.assertTrue("The chant should still be LIVE after " + minutes + " min in the background",
                 waitUntil(chant::isScreenVisible) && "LIVE".equals(chant.badgeText()));
         Assert.assertTrue("Pause should still reach the server", chant.tapPrimary() && chant.waitForBadge("Paused"));
@@ -192,7 +230,8 @@ public class LiveChantTest extends BaseTest {
     // --- helpers ---------------------------------------------------------------------------
 
     private void openJapaPlayer() {
-        Assume.assumeTrue("Skipping: " + JAPA_TRACK + " is not on Music home", chant.openTrack(JAPA_TRACK));
+        Assert.assertTrue(JAPA_TRACK + " should be on Music home (change it with -Dlivechant.japaTrack)",
+                chant.openTrack(JAPA_TRACK));
         Assert.assertTrue("The full player should open", waitUntil(chant::isPlayerVisible));
     }
 
@@ -243,24 +282,18 @@ public class LiveChantTest extends BaseTest {
     }
 
     private String waitForCard(String trackTitle) {
-        String[] action = {null};
-        waitUntil(() -> (action[0] = chant.cardAction(trackTitle)) != null);
-        return action[0];
+        try {
+            return new WebDriverWait(driver, WAIT).until(ignored -> chant.cardAction(trackTitle));
+        } catch (TimeoutException timeout) {
+            return null;
+        }
     }
 
-    private static boolean waitUntil(BooleanSupplier condition) {
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (System.currentTimeMillis() < deadline) {
-            if (condition.getAsBoolean()) {
-                return true;
-            }
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
+    private boolean waitUntil(BooleanSupplier condition) {
+        try {
+            return new WebDriverWait(driver, WAIT).until(ignored -> condition.getAsBoolean());
+        } catch (TimeoutException timeout) {
+            return false;
         }
-        return false;
     }
 }
