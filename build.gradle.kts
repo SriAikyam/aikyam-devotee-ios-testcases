@@ -150,6 +150,8 @@ tasks.test {
         "appium.bstackBuild",
         "appium.bstackSession",
         "appium.bstackLogin",
+        // AppUpdateTest: which state QA saved the dev update config in (forced|optional|none).
+        "appupdate.expect",
     ).forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
     }
