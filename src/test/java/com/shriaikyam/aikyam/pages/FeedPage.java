@@ -180,14 +180,75 @@ public class FeedPage {
         }
     }
 
-    /** iOS: XCUITest has no airplane-mode/network control for the simulator, so an offline
-     * scenario cannot be driven from here. Enabling skips the calling test instead of letting
-     * it pass against a still-online app; disabling is a no-op so teardown stays safe. */
+    private static final String SETTINGS_BUNDLE_ID = "com.apple.Preferences";
+    // English device language only; the switch has no language-independent identifier.
+    private final By airplaneModeSwitch = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeSwitch' AND (name == 'Airplane Mode' OR label == 'Airplane Mode')");
+
+    /** Physical iPhone: flips the Airplane Mode switch in the Settings app, then brings the
+     * app back. WebDriverAgent talks to the phone over USB, so the session survives going
+     * offline.
+     *
+     * Simulator and BrowserStack: XCUITest has no network control there. Enabling skips the
+     * calling test instead of letting it pass against a still-online app; disabling is a
+     * no-op so teardown stays safe.
+     *
+     * Disabling is a no-op unless this run turned Airplane mode on, so FeedTest's @After can
+     * call it after every test without a Settings round trip each time. */
     public void setAirplaneMode(boolean enabled) {
-        if (enabled) {
-            throw new AssumptionViolatedException(
-                    "iOS: network cannot be toggled through XCUITest; offline scenario not runnable");
+        if (!isPhysicalDevice()) {
+            if (enabled) {
+                throw new AssumptionViolatedException(
+                        "iOS: network cannot be toggled through XCUITest on a simulator; "
+                                + "offline scenario runs on a physical iPhone only");
+            }
+            return;
         }
+        if (!enabled && !airplaneModeTurnedOnByTest) {
+            return;
+        }
+
+        // Terminate first so Settings opens on its root list, not whatever sub-page a
+        // previous run or a person left it on.
+        driver.terminateApp(SETTINGS_BUNDLE_ID);
+        driver.activateApp(SETTINGS_BUNDLE_ID);
+        try {
+            WebElement toggle = new WebDriverWait(driver, DEFAULT_TIMEOUT)
+                    .until(ignored -> firstVisibleAction(List.of(airplaneModeSwitch)));
+            if (isSwitchOn(toggle) != enabled) {
+                // Set before the tap: if the wait below times out the switch may still have
+                // flipped, and teardown must then turn it back off. (When disabling, the
+                // flag only clears after the switch is confirmed off, so a failed attempt
+                // is retried by teardown.)
+                if (enabled) {
+                    airplaneModeTurnedOnByTest = true;
+                }
+                toggle.click();
+                new WebDriverWait(driver, SCROLL_TIMEOUT).until(ignored -> {
+                    WebElement current = firstVisibleAction(List.of(airplaneModeSwitch));
+                    return current != null && isSwitchOn(current) == enabled;
+                });
+            }
+            airplaneModeTurnedOnByTest = enabled;
+        } finally {
+            driver.activateApp(bundleId());
+        }
+    }
+
+    // Static: FeedPage is re-created per test, but the phone's state outlives it.
+    private static volatile boolean airplaneModeTurnedOnByTest;
+
+    /** Matches BaseTest: a local run is on a physical iPhone exactly when WebDriverAgent is
+     * signed with our team (appium.xcodeOrgId); BrowserStack runs pass appium.bstackApp. */
+    private static boolean isPhysicalDevice() {
+        String teamId = System.getProperty("appium.xcodeOrgId");
+        String bstackApp = System.getProperty("appium.bstackApp");
+        return teamId != null && !teamId.isBlank() && (bstackApp == null || bstackApp.isBlank());
+    }
+
+    private static boolean isSwitchOn(WebElement toggle) {
+        String value = toggle.getAttribute("value");
+        return "1".equals(value) || "true".equalsIgnoreCase(value);
     }
 
     /**
