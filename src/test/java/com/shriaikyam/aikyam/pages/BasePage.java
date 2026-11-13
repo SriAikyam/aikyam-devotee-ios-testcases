@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 public abstract class BasePage {
 
-    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
+    protected static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
     protected static final Duration SHORT_TIMEOUT = Duration.ofSeconds(8);
 
     protected final IOSDriver driver;

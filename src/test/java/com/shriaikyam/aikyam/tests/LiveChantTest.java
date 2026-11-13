@@ -1,14 +1,13 @@
 package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
-import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.LiveChantPage;
 import org.junit.Assert;
 import org.junit.Assume;
+import org.junit.AssumptionViolatedException;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.AssumptionViolatedException;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -31,6 +30,8 @@ public class LiveChantTest extends BaseTest {
 
     private static final String JAPA_TRACK = System.getProperty("livechant.japaTrack", "Gayatri Mantra");
     private static final String OTHER_TRACK = System.getProperty("livechant.otherTrack", "Shiva Tandav Stotram");
+    /** Same value as BasePage.DEFAULT_TIMEOUT, kept local so that stays protected. */
+    private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(30);
 
     private LiveChantPage chant;
 
@@ -71,8 +72,10 @@ public class LiveChantTest extends BaseTest {
         }
         try {
             endOwnChantIfAny();
-        } catch (RuntimeException ignored) {
-            // Best effort; the assertions in the test body are what report.
+        } catch (RuntimeException cleanupFailure) {
+            // Not rethrown: the test body's assertions are what report. But say so - a chant left
+            // live here blocks the next Start and shows to every devotee on the dev backend.
+            warn("could not end this device's Live Chant: " + cleanupFailure);
         }
     }
 
@@ -114,7 +117,7 @@ public class LiveChantTest extends BaseTest {
         Assert.assertEquals("The chant shows the shared track", JAPA_TRACK, chant.titleText());
         String startedBy = chant.startedByText();
         Assert.assertTrue("The chant shows who started it (was " + startedBy + ")",
-                startedBy != null && startedBy.startsWith("Started by "));
+                startedBy != null && startedBy.matches("Started by \\S.*"));
         Assert.assertTrue(JAPA_TRACK + " is a japa track, so the counter should show", chant.isJapaVisible());
         Assert.assertTrue("The japa counter starts at the first repetition", chant.japaRepetition() >= 1);
 
@@ -279,20 +282,31 @@ public class LiveChantTest extends BaseTest {
                 if (chant.tapMiniPlayerLive()) {
                     waitUntil(chant::isEndVisible);
                 }
-            } else if ("Open".equals(chant.cardAction(JAPA_TRACK)) && chant.tapCard(JAPA_TRACK)) {
-                waitUntil(chant::isEndVisible);
+            } else if ("Open".equals(chant.cardAction(JAPA_TRACK))) {
+                if (chant.tapCard(JAPA_TRACK)) {
+                    waitUntil(chant::isEndVisible);
+                }
+            } else {
+                return; // nothing of ours is live
             }
         }
-        if (chant.isEndVisible() && chant.tapEnd()
-                && waitUntil(() -> LiveChantPage.END_TITLE.equals(chant.sheetTitle()))) {
-            chant.confirmSheet();
-            chant.isGone();
+        boolean ended = chant.isEndVisible()
+                && chant.tapEnd()
+                && waitUntil(() -> LiveChantPage.END_TITLE.equals(chant.sheetTitle()))
+                && chant.confirmSheet()
+                && chant.isGone();
+        if (!ended) {
+            warn("this device's Live Chant may still be live on the dev backend - End it by hand");
         }
+    }
+
+    private static void warn(String message) {
+        System.out.println("[LiveChantTest] cleanup WARNING: " + message);
     }
 
     private String waitForCard(String trackTitle) {
         try {
-            return new WebDriverWait(driver, BasePage.DEFAULT_TIMEOUT).until(ignored -> chant.cardAction(trackTitle));
+            return new WebDriverWait(driver, WAIT_TIMEOUT).until(ignored -> chant.cardAction(trackTitle));
         } catch (TimeoutException timeout) {
             return null;
         }
@@ -300,7 +314,7 @@ public class LiveChantTest extends BaseTest {
 
     private boolean waitUntil(BooleanSupplier condition) {
         try {
-            return new WebDriverWait(driver, BasePage.DEFAULT_TIMEOUT).until(ignored -> condition.getAsBoolean());
+            return new WebDriverWait(driver, WAIT_TIMEOUT).until(ignored -> condition.getAsBoolean());
         } catch (TimeoutException timeout) {
             return false;
         }
