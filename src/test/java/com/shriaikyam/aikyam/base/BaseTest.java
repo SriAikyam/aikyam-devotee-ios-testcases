@@ -180,6 +180,12 @@ public abstract class BaseTest {
             if (udid != null && !udid.isBlank()) {
                 options.setUdid(udid);
             }
+            // Two simulators on one Mac each need their own WebDriverAgent port; on the
+            // shared default (8100) a second run kills the first one's session.
+            String wdaPort = getProperty("appium.wdaLocalPort", null);
+            if (wdaPort != null && !wdaPort.isBlank()) {
+                options.amend("appium:wdaLocalPort", Integer.parseInt(wdaPort));
+            }
 
             // A physical iPhone needs WebDriverAgent signed by our team; the default
             // com.facebook.* bundle id cannot be provisioned under it. Simulators skip this.

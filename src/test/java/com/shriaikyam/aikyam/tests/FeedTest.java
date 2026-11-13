@@ -248,4 +248,24 @@ public class FeedTest extends BaseTest {
                 feedPage.isAppUsableAfterBackButtonSpam(10)
         );
     }
+
+    /** Smoke check only: deep into the feed, the list still scrolls. After 30 swipes there
+     * may still be loaded posts below, so this does not prove paging continued and is not
+     * coverage for iOS PR #701 (its unit tests cover the hasMore / special-card-only page). */
+    @Test
+    public void TC365_Verify_Feed_Still_Scrolls_Deep_Into_Timeline() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        for (int swipe = 0; swipe < 30; swipe++) {
+            feedPage.swipeUp();
+        }
+        String deepState = feedPage.captureFeedState();
+        feedPage.swipeUp();
+
+        Assert.assertTrue(
+                "After 30 swipes the feed should still load and scroll to more posts",
+                feedPage.didFeedScroll(deepState)
+        );
+    }
 }
