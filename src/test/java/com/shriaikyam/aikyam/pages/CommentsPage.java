@@ -203,6 +203,35 @@ public class CommentsPage extends BasePage {
         return waitUntilGone(commentText(commentText));
     }
 
+    /** The rendered text of the first comment containing the token (a reply's includes its
+     * leading "@Name"), or null if absent. */
+    public String commentLabel(String token) {
+        WebElement e = firstDisplayed(commentText(token));
+        return e == null ? null : e.getAttribute("label");
+    }
+
+    /** Back up until the list stops moving. */
+    public void scrollToTop() {
+        hideKeyboardIfShown();
+        scrollBackUntilVisible(COMMENT_FULL_SCROLL_BUDGET, NEVER_MATCHES);
+    }
+
+    private static final By NEVER_MATCHES = AppiumBy.accessibilityId("comments.scroll-sentinel");
+
+    /** Long threads on the shared dev post; the default 10 swipes is not always enough. */
+    private static final int COMMENT_FULL_SCROLL_BUDGET = 25;
+
+    /** Deletes the comment wherever it is in the list: from the top, scrolling down for it. */
+    public boolean deleteCommentAnywhere(String token) {
+        if (!isCommentVisible(token)) {
+            scrollToTop();
+            if (!waitForCommentToAppear(token)) {
+                return false;
+            }
+        }
+        return deleteComment(token) && waitForCommentToDisappear(token);
+    }
+
     /** Taps the Reply button directly below the given comment's text. */
     public boolean tapReplyUnder(String commentText) {
         WebElement c = firstDisplayed(commentText(commentText));
