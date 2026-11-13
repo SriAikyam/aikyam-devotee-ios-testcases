@@ -661,6 +661,49 @@ public class NotificationJourneyTest extends BaseTest {
      * Skipped: requires a dedicated priest temple test account and a temple context
      * switch. Verify manually using the QA priest account in the Notion test accounts.
      */
+    /**
+     * TC316 — G4: Bare {@code deeplink=aikyam://streams} (no stream id) in a notification
+     * payload produces a {@code .liveTab} destination which has no {@code appRoute} and no
+     * {@code musicDeepLink} — the notification handler returns {@code nil} and the notification
+     * is silently not routed. PR #698 did not introduce a handler for this case; this test
+     * documents and guards the current behaviour (home feed stays, no crash).
+     *
+     * Distinct from TC306 (direct aikyam://streams deeplink works) and TC310 (tab-switch
+     * deeplink in notification yields to screen field).
+     */
+    @Test
+    public void TC316_Notify_Bare_Streams_Deeplink_Without_Id_Is_Silently_Not_Routed() {
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "Live now",
+                DeepLinkPage.payload("deeplink", "aikyam://streams"),
+                "Live now", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        // No screen field, no id — routing returns nil; app must stay on home feed.
+        Assert.assertTrue("Home feed must still be visible — bare streams deeplink in notification is not routed",
+                links.isHomeFeedShown(Duration.ofSeconds(8)));
+    }
+
+    /**
+     * TC317 — G5: {@code deeplink=aikyam://orders} in a notification payload routes via
+     * {@code ShareDestination.ordersHistory.appRoute} to the orders history screen.
+     * TC287 covers {@code aikyam://settings}; this covers the sibling {@code orders} destination
+     * which has its own {@code appRoute} entry added in PR #698.
+     */
+    @Test
+    public void TC317_Notify_Orders_Deeplink_Opens_Orders_History_Screen() {
+        boolean tapped = links.fireAndTapNotification(
+                NOTIF_TITLE, "Your booking is confirmed",
+                DeepLinkPage.payload("deeplink", "aikyam://orders"),
+                "Your booking is confirmed", BANNER);
+        Assert.assertTrue("Notification must be delivered and banner tapped", tapped);
+        Assert.assertTrue("Orders history screen must be visible",
+                links.waitFor(links.byDesc("ordersHistory.screen"), LAND)
+                        || links.waitForText("Orders", LAND)
+                        || links.waitForText("Bookings", LAND));
+        Assert.assertFalse("No Home feed — orders screen is in the foreground",
+                links.isHomeFeedShown(Duration.ofSeconds(3)));
+    }
+
     @Ignore("Requires dedicated priest temple test account — verify manually")
     @Test
     public void TC314_Notify_LiveId_Opens_Stream_Player_For_Priest_Temple_Account() {

@@ -759,6 +759,31 @@ public class DeepLinkJourneyTest extends BaseTest {
      * Verify this manually using the QA Panchang page that has an "Open Music" link
      * documented in the team's Notion QA playbook for PR #698.
      */
+    /**
+     * TC315 — G1: PR #698 guards ALL tab-switch destinations behind isCurrentContextPriestTemple.
+     * TC258 covers only aikyam://explore for a priest account; this stub covers the remaining
+     * tab-switch cases (music, events, apps). A regression re-enabling any of them for priests
+     * would not be caught without this test.
+     *
+     * Skipped: requires switching the app to a priest temple context (Settings → Account switcher).
+     * Verify manually using the QA priest account documented in Notion test accounts.
+     */
+    @Ignore("Requires dedicated priest temple test account — verify manually for aikyam://music, aikyam://events, aikyam://apps")
+    @Test
+    public void TC315_Verify_All_Tab_Switch_Deeplinks_Blocked_For_Priest_Temple_Account() {
+        // Switch to priest temple context (manual step — account switcher in Settings).
+        // Fire each tab-switch deeplink and assert the app stays on Home, not on the target tab.
+        for (String link : new String[]{"aikyam://music", "aikyam://events", "aikyam://apps"}) {
+            Assert.assertTrue("Fire " + link + " must succeed", links.fire(link));
+            links.waitFor(links.byDesc("tab.home"), Duration.ofSeconds(5));
+            Assert.assertFalse(link + " must NOT switch tab for priest account — music tab must NOT appear",
+                    new MusicPage(driver).isMusicScreenVisible());
+            Assert.assertFalse(link + " must NOT switch tab for priest account — events tab must NOT appear",
+                    links.isShown(links.byDesc("tab.events")));
+        }
+        Assert.fail("Not implemented — requires priest temple context setup");
+    }
+
     @Ignore("Requires a known link target in the Panchang web content — verify manually per QA playbook")
     @Test
     public void TC308_Verify_Aikyam_Link_From_Within_Mini_App_Navigates_Main_App() {
