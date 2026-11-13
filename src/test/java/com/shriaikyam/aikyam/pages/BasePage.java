@@ -63,6 +63,23 @@ public abstract class BasePage {
      * there makes resetToHome()/relaunchApp() believe they are home, and
      * restorePersonalAccountIfOnTemple() open Settings on the wrong screen (review
      * finding 2). The identifier branch stays unscoped - an identifier is already unique. */
+    /** Same fallback contract as idOrLabel, for a screen whose title lives in the system
+     * navigation bar (iOS main's Music/Events/Apps tab roots, Family Members): the bar exposes
+     * its title as its name. Scoped to the navigation bar for the same false-positive reason. */
+    public static By idOrNavTitle(String identifier, String title) {
+        return AppiumBy.iOSNsPredicateString(
+                "name == " + predicateLiteral(identifier)
+                        + " OR (type == 'XCUIElementTypeNavigationBar' AND name == "
+                        + predicateLiteral(title) + ")");
+    }
+
+    /** idOrLabel for a non-button element (a card title): any element whose label is exactly
+     * {@code text}. Wider than idOrLabel, so only for text unique on its screen. */
+    public static By idOrText(String identifier, String text) {
+        return AppiumBy.iOSNsPredicateString(
+                "name == " + predicateLiteral(identifier) + " OR label == " + predicateLiteral(text));
+    }
+
     public static By idOrLabel(String identifier, String label) {
         return AppiumBy.iOSNsPredicateString(
                 "name == " + predicateLiteral(identifier)

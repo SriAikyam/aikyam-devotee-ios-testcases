@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 public class MusicPage extends BasePage {
 
     // MusicTopBar's centred title. Not the tab-bar label, which carries tab.music.
-    private final By musicHeaderTitle = id("music.title");
+    private final By musicHeaderTitle = idOrNavTitle("music.title", "Music");
 
     // Title Text of every MusicTrackCard on Music home (track and album cards alike - the
     // section's own tap handler decides player vs Album Details). Its label is the card's

@@ -28,8 +28,8 @@ public class ExplorePage extends BasePage {
 
     // Map/List segments of ExploreView.mapListToggle. Both are always present on the Temples
     // tab; the active one carries the isSelected trait (see isMapViewActive()).
-    private final By mapToggle = id("explore.toggle.map");
-    private final By listToggle = id("explore.toggle.list");
+    private final By mapToggle = idOrLabel("explore.toggle.map", "Map");
+    private final By listToggle = idOrLabel("explore.toggle.list", "List");
 
     // Pencil button in ExploreView.locationInfoPill - only rendered once location resolution
     // has landed (viewModel.shouldShowLocationPill).

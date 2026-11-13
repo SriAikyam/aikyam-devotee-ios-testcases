@@ -13,8 +13,8 @@ import java.util.Collections;
 public class AppsPage extends BasePage {
 
     // AppsView: the two live hero cards and the static "coming soon" catalogue.
-    private final By stotragaluCard = id("apps.card.stotragalu");
-    private final By panchangCard = id("apps.card.panchang");
+    private final By stotragaluCard = idOrText("apps.card.stotragalu", "Stotragalu");
+    private final By panchangCard = idOrText("apps.card.panchang", "Panchang");
     private final By exploreMoreDivider = id("apps.divider");
     // Every ComingSoonRow shares one id; the row is a single combined element.
     private final By comingSoonRow = id("apps.comingsoon");
