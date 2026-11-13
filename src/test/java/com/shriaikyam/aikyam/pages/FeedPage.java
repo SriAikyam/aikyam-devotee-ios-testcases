@@ -237,6 +237,22 @@ public class FeedPage {
 
     // Static: FeedPage is re-created per test, but the phone's state outlives it.
     private static volatile boolean airplaneModeTurnedOnByTest;
+    private static volatile boolean airplaneModeCheckedThisRun;
+
+    /** Physical iPhone, once per run (JVM): turns Airplane Mode off if an earlier run left it
+     * on. airplaneModeTurnedOnByTest lives in memory only, so a run killed while offline
+     * (Ctrl-C, crash) would otherwise leave every test of every later run offline. Reads the
+     * real switch in Settings; a no-op on a simulator or BrowserStack. Called from
+     * BaseTest.setUp. */
+    public void turnOffAirplaneModeLeftOnByAnEarlierRun() {
+        if (!isPhysicalDevice() || airplaneModeCheckedThisRun) {
+            return;
+        }
+        airplaneModeCheckedThisRun = true;
+        // Forces setAirplaneMode(false) past its "only if we turned it on" shortcut.
+        airplaneModeTurnedOnByTest = true;
+        setAirplaneMode(false);
+    }
 
     /** Matches BaseTest: a local run is on a physical iPhone exactly when WebDriverAgent is
      * signed with our team (appium.xcodeOrgId); BrowserStack runs pass appium.bstackApp. */
@@ -263,13 +279,16 @@ public class FeedPage {
     // ---- Load-more error footer (aikyam-devotee-ios#712) ----
 
     // Shown under the posts when the NEXT page fails; a failure on an empty list is the
-    // full-screen error instead. The label branches cover builds without the identifiers,
-    // English copy only ("No internet connection." is APIError's offline text).
-    private final By loadMoreError = AppiumBy.iOSNsPredicateString(
-            "name == 'feed.loadMore.error' OR label == 'No internet connection.'");
-    private final By loadMoreRetry = BasePage.idOrLabel("feed.loadMore.retry", "Retry");
+    // full-screen error instead. Identifiers only, no label fallback: the full-screen error
+    // shows the same "No internet connection." text and its own "Retry" button, so matching
+    // on text would let these tests pass when the app wrongly showed the full-screen error.
+    private final By loadMoreError = AppiumBy.accessibilityId("feed.loadMore.error");
+    private final By loadMoreRetry = AppiumBy.accessibilityId("feed.loadMore.retry");
     // Debounce (1s) + the page request, plus the radio re-associating after airplane mode.
     private static final Duration RECONNECT_TIMEOUT = Duration.ofSeconds(30);
+    // While the retry is in flight the footer is swapped for a spinner, so "gone" alone
+    // can be a retry that is about to fail again. It has to stay gone this long.
+    private static final Duration FOOTER_STAYS_GONE = Duration.ofSeconds(5);
 
     /** Swipes toward the end of the loaded posts until the load-more error footer shows.
      * Each swipe moves about half a screen, and paging fires 10 posts from the end, so
@@ -296,13 +315,31 @@ public class FeedPage {
         return tapFirstVisible(loadMoreRetry);
     }
 
-    /** Waits for the footer to disappear without any tap: the app's reconnect handler
-     * re-requests the failed page by itself. */
-    public boolean waitForLoadMoreErrorGone() {
+    /** Waits for the footer to disappear without any tap (the app's reconnect handler
+     * re-requests the failed page by itself), then requires it to STAY gone for
+     * FOOTER_STAYS_GONE. A retry that fails again brings the footer back and returns false. */
+    public boolean waitForLoadMoreErrorGoneForGood() {
         try {
-            return new WebDriverWait(driver, RECONNECT_TIMEOUT)
+            new WebDriverWait(driver, RECONNECT_TIMEOUT)
                     .until(ignored -> !isLoadMoreErrorVisible());
-        } catch (RuntimeException timedOut) {
+        } catch (RuntimeException neverCleared) {
+            return false;
+        }
+        try {
+            new WebDriverWait(driver, FOOTER_STAYS_GONE)
+                    .until(ignored -> isLoadMoreErrorVisible());
+            return false;
+        } catch (RuntimeException stayedGone) {
+            return true;
+        }
+    }
+
+    /** didFeedScroll as a boolean: false on timeout instead of throwing, so the caller's
+     * assertion message is what the report shows. */
+    public boolean didFeedChangeFrom(String previousFeedState) {
+        try {
+            return didFeedScroll(previousFeedState);
+        } catch (RuntimeException unchanged) {
             return false;
         }
     }

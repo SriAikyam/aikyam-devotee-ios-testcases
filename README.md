@@ -45,7 +45,9 @@ Offline cases (`FeedTest` TC151, TC380–TC382) go through `FeedPage.setAirplane
 simulator or BrowserStack they skip. On a physical iPhone (`-Dappium.xcodeOrgId=<team>` set)
 they flip Airplane Mode in the Settings app. For that, connect the phone **by USB** (WebDriverAgent
 must not depend on Wi‑Fi) and set its language to English. Also check that Wi‑Fi turns off with
-Airplane Mode: iOS remembers if Wi‑Fi was turned back on while in Airplane Mode.
+Airplane Mode: iOS remembers if Wi‑Fi was turned back on while in Airplane Mode. At the start
+of each run on a device, the suite turns Airplane Mode off if an earlier, interrupted run
+left it on.
 
 Read the verdict from the JUnit XML in `build/test-results/<task>/`. Failure screenshots and
 page sources are saved to `build/test-results/diagnostics/<TestClass>/`.

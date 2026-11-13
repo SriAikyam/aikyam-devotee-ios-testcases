@@ -227,6 +227,10 @@ public abstract class BaseTest {
                 .timeouts()
                 .implicitlyWait(IMPLICIT_WAIT);
 
+        // Physical iPhone only, once per run: a run killed while FeedTest had Airplane Mode
+        // on would leave this whole run offline. Ends by re-activating the app.
+        new FeedPage(driver).turnOffAirplaneModeLeftOnByAnEarlierRun();
+
         // setNoReset(true) preserves app/session state across tests, but doesn't
         // guarantee the app is actually in the foreground at session start - e.g. if a
         // prior run's recovery logic backed all the way out to the home screen, or the
