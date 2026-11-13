@@ -237,6 +237,88 @@ public class FeedTest extends BaseTest {
                 feedPage.isAnyFeedItemVisible());
     }
 
+    // ---- Load-more failure and retry (aikyam-devotee-ios#712) ----
+    // All three go offline through setAirplaneMode, which skips them on a simulator or
+    // BrowserStack (no network control) and on a physical iPhone unless the run opts in with
+    // -Dfeed.offline=true, so a normal full run (p1Rest) doesn't flip Airplane Mode. The
+    // posts already on screen stay loaded, so going offline after waitUntilLoaded() makes
+    // the NEXT page the one that fails.
+
+    private static final int SWIPES_TO_PAGE_END = 40;
+
+    @Test
+    public void TC380_Verify_Load_More_Failure_Shows_Retry_Footer_And_Keeps_Posts() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        feedPage.setAirplaneMode(true);
+        try {
+            Assert.assertTrue("A failed next page should show the error footer under the posts",
+                    feedPage.scrollUntilLoadMoreErrorVisible(SWIPES_TO_PAGE_END));
+            Assert.assertTrue("The footer should offer Retry", feedPage.isLoadMoreRetryVisible());
+            feedPage.swipeDown();
+            Assert.assertTrue("The posts already loaded should stay, not be replaced by a "
+                    + "full-screen error", feedPage.isAnyFeedItemVisible());
+        } finally {
+            feedPage.setAirplaneMode(false);
+        }
+    }
+
+    /** Checks only that a Retry tap while still offline leaves the user with the footer, the
+     * Retry button and the posts: no crash, no full-screen error, no dead end.
+     *
+     * It does NOT prove the tap re-requested the page, and would pass if Retry did nothing.
+     * The tap swaps the footer for a spinner until the request fails, but offline it fails
+     * within milliseconds, too fast for Appium to see the footer go and come back. Waiting
+     * for that would make the test flaky, not stronger. The re-request itself is covered by
+     * #712's unit test testRetryAfterFailedNextPageClearsFooterAndAppendsTheSamePage, and the
+     * online path by TC382. */
+    @Test
+    public void TC381_Verify_Retry_While_Still_Offline_Keeps_Footer_And_Posts() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        feedPage.setAirplaneMode(true);
+        try {
+            Assert.assertTrue("Precondition: the load-more error footer should show",
+                    feedPage.scrollUntilLoadMoreErrorVisible(SWIPES_TO_PAGE_END));
+            Assert.assertTrue("Retry should be tappable", feedPage.tapLoadMoreRetry());
+            Assert.assertTrue("After a failed Retry the footer should still be shown",
+                    feedPage.scrollUntilLoadMoreErrorVisible(3));
+            Assert.assertTrue("Retry should still be offered", feedPage.isLoadMoreRetryVisible());
+            feedPage.swipeDown();
+            Assert.assertTrue("The posts should stay after a failed Retry",
+                    feedPage.isAnyFeedItemVisible());
+        } finally {
+            feedPage.setAirplaneMode(false);
+        }
+    }
+
+    @Test
+    public void TC382_Verify_Feed_Retries_Load_More_By_Itself_On_Reconnect() {
+        FeedPage feedPage = new FeedPage(driver);
+
+        feedPage.waitUntilLoaded();
+        feedPage.setAirplaneMode(true);
+        try {
+            Assert.assertTrue("Precondition: the load-more error footer should show",
+                    feedPage.scrollUntilLoadMoreErrorVisible(SWIPES_TO_PAGE_END));
+        } finally {
+            feedPage.setAirplaneMode(false);
+        }
+
+        // No Retry tap and no pull-to-refresh: the reconnect alone has to load the page.
+        // "Stays gone" rather than "gone": during the retry the footer is swapped for a
+        // spinner, so a retry that fails again would briefly look like success.
+        Assert.assertTrue("The footer should clear by itself once the network is back, "
+                        + "and stay cleared (not come back from a retry that failed again)",
+                feedPage.waitForLoadMoreErrorGoneForGood());
+        String atOldEnd = feedPage.captureFeedState();
+        feedPage.swipeUp();
+        Assert.assertTrue("The next posts should load below the old end of the list",
+                feedPage.didFeedChangeFrom(atOldEnd));
+    }
+
     @Test
     public void TC064_Verify_Feed_Usable_After_Rapid_Back_Button_Spam() {
         FeedPage feedPage = new FeedPage(driver);

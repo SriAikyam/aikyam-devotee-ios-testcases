@@ -1,5 +1,6 @@
 package com.shriaikyam.aikyam.pages;
 
+import com.shriaikyam.aikyam.utils.DeviceControl;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.junit.AssumptionViolatedException;
@@ -8,6 +9,7 @@ import org.openqa.selenium.Dimension;
 import org.openqa.selenium.Point;
 import org.openqa.selenium.Rectangle;
 import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.PointerInput;
 import org.openqa.selenium.interactions.Sequence;
@@ -180,14 +182,102 @@ public class FeedPage {
         }
     }
 
-    /** iOS: XCUITest has no airplane-mode/network control for the simulator, so an offline
-     * scenario cannot be driven from here. Enabling skips the calling test instead of letting
-     * it pass against a still-online app; disabling is a no-op so teardown stays safe. */
+    private static final String SETTINGS_BUNDLE_ID = "com.apple.Preferences";
+    // English device language only; the switch has no language-independent identifier.
+    private final By airplaneModeSwitch = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeSwitch' AND (name == 'Airplane Mode' OR label == 'Airplane Mode')");
+
+    /** Opt-in property for the offline cases. They flip Airplane Mode and swipe up to 40
+     * times each, so a normal full run on the phone (p1Rest included) must not pick them up. */
+    public static final String OFFLINE_OPT_IN = "feed.offline";
+
+    /** Physical iPhone with -Dfeed.offline=true: flips the Airplane Mode switch in the
+     * Settings app, then brings the app back. WebDriverAgent talks to the phone over USB, so
+     * the session survives going offline.
+     *
+     * Enabling SKIPS the calling test on a simulator or BrowserStack (XCUITest has no network
+     * control there), and on a device without the opt-in. Disabling is a no-op unless this
+     * run turned Airplane Mode on, so FeedTest's @After can call it after every test without
+     * a Settings round trip, and a phone someone left in Airplane Mode on purpose is not
+     * switched back by a test that found it already on. */
     public void setAirplaneMode(boolean enabled) {
-        if (enabled) {
-            throw new AssumptionViolatedException(
-                    "iOS: network cannot be toggled through XCUITest; offline scenario not runnable");
+        if (DeviceControl.isSimulator()) {
+            if (enabled) {
+                throw new AssumptionViolatedException(
+                        "iOS: network cannot be toggled through XCUITest on a simulator; "
+                                + "offline scenario runs on a physical iPhone only");
+            }
+            return;
         }
+        if (enabled && !Boolean.getBoolean(OFFLINE_OPT_IN)) {
+            throw new AssumptionViolatedException("Offline scenario: opt in with -D"
+                    + OFFLINE_OPT_IN + "=true on a USB-connected physical iPhone");
+        }
+        if (!enabled && !airplaneModeTurnedOnByTest) {
+            return;
+        }
+
+        // Terminate first so Settings opens on its root list, not whatever sub-page a
+        // previous run or a person left it on.
+        driver.terminateApp(SETTINGS_BUNDLE_ID);
+        driver.activateApp(SETTINGS_BUNDLE_ID);
+        try {
+            WebElement toggle = new WebDriverWait(driver, DEFAULT_TIMEOUT)
+                    .until(ignored -> firstVisibleAction(List.of(airplaneModeSwitch)));
+            if (isSwitchOn(toggle) != enabled) {
+                // Set before the tap: if the wait below times out the switch may still have
+                // flipped, and teardown must then turn it back off. When disabling, the flag
+                // only clears once the switch is confirmed off, so teardown retries a failure.
+                if (enabled) {
+                    airplaneModeTurnedOnByTest = true;
+                }
+                toggle.click();
+                new WebDriverWait(driver, SCROLL_TIMEOUT).until(ignored -> {
+                    WebElement current = firstVisibleAction(List.of(airplaneModeSwitch));
+                    return current != null && isSwitchOn(current) == enabled;
+                });
+            }
+            // Enabling a switch that was already on leaves the flag alone: this run did not
+            // turn it on, so teardown must not turn it off.
+            if (!enabled) {
+                airplaneModeTurnedOnByTest = false;
+            }
+        } finally {
+            driver.activateApp(bundleId());
+        }
+    }
+
+    // Static: FeedPage is re-created per test, but the phone's state outlives it.
+    private static volatile boolean airplaneModeTurnedOnByTest;
+    private static volatile boolean airplaneModeCheckedThisRun;
+
+    /** Physical iPhone, once per run (JVM): turns Airplane Mode off if an earlier run left it
+     * on. airplaneModeTurnedOnByTest lives in memory only, so a run killed while offline
+     * (Ctrl-C, crash) would otherwise leave every test of every later run offline. Reads the
+     * real switch in Settings; a no-op on a simulator or BrowserStack. Called from
+     * BaseTest.setUp for every class, so it must never fail setup: a check that can't read
+     * the switch (non-English phone, Settings slow to open) is logged and skipped, and the
+     * flag is reset so FeedTest's @After doesn't retry it after every test. */
+    public void turnOffAirplaneModeLeftOnByAnEarlierRun() {
+        if (DeviceControl.isSimulator() || airplaneModeCheckedThisRun) {
+            return;
+        }
+        airplaneModeCheckedThisRun = true;
+        // Forces setAirplaneMode(false) past its "only if we turned it on" shortcut.
+        airplaneModeTurnedOnByTest = true;
+        try {
+            setAirplaneMode(false);
+        } catch (RuntimeException couldNotCheck) {
+            airplaneModeTurnedOnByTest = false;
+            System.out.println("[airplane-mode] could not check the Airplane Mode switch at the "
+                    + "start of the run; carrying on. If the phone is offline, turn Airplane "
+                    + "Mode off by hand. Cause: " + couldNotCheck);
+        }
+    }
+
+    private static boolean isSwitchOn(WebElement toggle) {
+        String value = toggle.getAttribute("value");
+        return "1".equals(value) || "true".equalsIgnoreCase(value);
     }
 
     /**
@@ -197,6 +287,92 @@ public class FeedPage {
     public boolean isAppResponsiveOffline() {
         swipeUp();
         return hasNonBlankPageSource();
+    }
+
+    // ---- Load-more error footer (aikyam-devotee-ios#712) ----
+
+    // Shown under the posts when the NEXT page fails; a failure on an empty list is the
+    // full-screen error instead. Identifiers only, no label fallback: the full-screen error
+    // shows the same "No internet connection." text and its own "Retry" button, so matching
+    // on text would let these tests pass when the app wrongly showed the full-screen error.
+    private final By loadMoreError = AppiumBy.accessibilityId("feed.loadMore.error");
+    private final By loadMoreRetry = AppiumBy.accessibilityId("feed.loadMore.retry");
+    // Debounce (1s) + the page request, plus the radio re-associating after airplane mode.
+    private static final Duration RECONNECT_TIMEOUT = Duration.ofSeconds(30);
+    // While the retry is in flight the footer is swapped for a spinner, so "gone" alone
+    // can be a retry that is about to fail again. It has to stay gone this long.
+    private static final Duration FOOTER_STAYS_GONE = Duration.ofSeconds(5);
+
+    /** Swipes toward the end of the loaded posts until the load-more error footer shows.
+     * Each swipe moves about half a screen, and paging fires 10 posts from the end, so
+     * this has to cover a full page (~20 posts) of already-loaded rows first. */
+    public boolean scrollUntilLoadMoreErrorVisible(int maxSwipes) {
+        for (int i = 0; i < maxSwipes; i++) {
+            if (isLoadMoreErrorVisible()) {
+                return true;
+            }
+            swipeUp();
+        }
+        return isLoadMoreErrorVisible();
+    }
+
+    public boolean isLoadMoreErrorVisible() {
+        try {
+            return loadMoreErrorShown();
+        } catch (StaleElementReferenceException reRendered) {
+            return false;
+        }
+    }
+
+    /** Not visibleElements(): that swallows every error as "nothing visible", so a dropped
+     * session would read as "the footer stayed gone" and pass TC382. This lets anything but
+     * a stale element (a SwiftUI re-render; the waits below retry it) propagate.
+     *
+     * Sets the implicit wait to zero and leaves it there: zero is the session default
+     * (BaseTest.IMPLICIT_WAIT). Setting it explicitly rather than assuming it, because
+     * visibleElements() restores it to IMPLICIT_TIMEOUT (5s) after every call. */
+    private boolean loadMoreErrorShown() {
+        driver.manage().timeouts().implicitlyWait(Duration.ZERO);
+        return driver.findElements(loadMoreError).stream().anyMatch(WebElement::isDisplayed);
+    }
+
+    public boolean isLoadMoreRetryVisible() {
+        return !visibleElements(loadMoreRetry).isEmpty();
+    }
+
+    public boolean tapLoadMoreRetry() {
+        return tapFirstVisible(loadMoreRetry);
+    }
+
+    /** Waits for the footer to disappear without any tap (the app's reconnect handler
+     * re-requests the failed page by itself), then requires it to STAY gone for
+     * FOOTER_STAYS_GONE. A retry that fails again brings the footer back and returns false. */
+    public boolean waitForLoadMoreErrorGoneForGood() {
+        try {
+            new WebDriverWait(driver, RECONNECT_TIMEOUT)
+                    .ignoring(StaleElementReferenceException.class)
+                    .until(ignored -> !loadMoreErrorShown());
+        } catch (TimeoutException neverCleared) {
+            return false;
+        }
+        try {
+            new WebDriverWait(driver, FOOTER_STAYS_GONE)
+                    .ignoring(StaleElementReferenceException.class)
+                    .until(ignored -> loadMoreErrorShown());
+            return false;
+        } catch (TimeoutException stayedGone) {
+            return true;
+        }
+    }
+
+    /** didFeedScroll as a boolean: false on timeout instead of throwing, so the caller's
+     * assertion message is what the report shows. */
+    public boolean didFeedChangeFrom(String previousFeedState) {
+        try {
+            return didFeedScroll(previousFeedState);
+        } catch (TimeoutException unchanged) {
+            return false;
+        }
     }
 
     /**

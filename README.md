@@ -41,6 +41,21 @@ cd AppiumTests
 Optional properties: `appium.serverUrl`, `appium.bundleId`, `appium.deviceName`,
 `appium.platformVersion`, `appium.worker`.
 
+Offline cases (`FeedTest` TC151, TC380–TC382) go through `FeedPage.setAirplaneMode`. They
+skip on a simulator or BrowserStack, and on a physical iPhone (a non-simulator `appium.udid`,
+see `DeviceControl.isSimulator()`) unless the run opts in with `-Dfeed.offline=true`, so a
+normal full run never flips Airplane Mode. Opted in, they flip Airplane Mode in the Settings
+app, which needs the phone connected **by USB** (WebDriverAgent must not depend on Wi‑Fi) and
+set to English. Also check that Wi‑Fi turns off with Airplane Mode: iOS remembers if Wi‑Fi was
+turned back on while in Airplane Mode. At the start of each run on a device, the suite turns
+Airplane Mode off if an earlier, interrupted run left it on (a failed check is logged, never
+fails the test).
+
+```bash
+./gradlew test -Dappium.udid=<iphone-udid> -Dappium.xcodeOrgId=<team> -Dfeed.offline=true \
+  --tests '*FeedTest.TC151*' --tests '*FeedTest.TC380*' --tests '*FeedTest.TC381*' --tests '*FeedTest.TC382*'
+```
+
 Read the verdict from the JUnit XML in `build/test-results/<task>/`. Failure screenshots and
 page sources are saved to `build/test-results/diagnostics/<TestClass>/`.
 
