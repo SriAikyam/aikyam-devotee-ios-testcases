@@ -1,6 +1,7 @@
 package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
+import com.shriaikyam.aikyam.data.TestData;
 import com.shriaikyam.aikyam.pages.AppsPage;
 import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.DeepLinkPage;
@@ -14,6 +15,7 @@ import com.shriaikyam.aikyam.pages.ProfilePage;
 import com.shriaikyam.aikyam.pages.SettingsPage;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -38,11 +40,10 @@ public class DeepLinkJourneyTest extends BaseTest {
     public void startOnHome() {
         links = new DeepLinkPage(driver);
         new HomePage(driver).tapHomeTab();
-        FeedPage feed = new FeedPage(driver);
-        feed.waitUntilLoaded();
-        // The first post is read to know which post a link should open, so start from the
-        // top of All Posts: the Temples/Live filter and the scroll position persist.
-        feed.tapAllPostsFilter();
+        // Start from All Posts: the Temples/Live filter persists, and the Live-feed cases need
+        // to see the filter change.
+        links.selectAllPosts();
+        Assert.assertTrue("Precondition: Home feed on All Posts", links.isHomeFeedShown(LAND));
     }
 
     @After
@@ -194,609 +195,237 @@ public class DeepLinkJourneyTest extends BaseTest {
     }
 
     // -------------------------------------------------------------------------
-    // TC255-TC257: tab-switch deep links (PR #698 fix for issue #668 and #699)
+    // TC255-TC260: tab-switch deep links (iOS PR #698, issues #668 / #685).
+    // A tab switch selects the tab and pushes nothing, so each case asserts the selected
+    // tab (the tab bar's isSelected trait), the tab's own content, and no Back button.
     // -------------------------------------------------------------------------
 
-    /**
-     * aikyam://explore must switch to the Explore tab, not push Explore as an overlay on
-     * the Home tab (which left Home selected in the tab bar and showed a Back button).
-     * Fixed in feat/aikyam-deeplinks-clean (issue #668).
-     */
+    private static final Duration SETTLE = Duration.ofSeconds(5);
+    private static final String UNKNOWN = TestData.UNKNOWN_ID;
+
+    private void assertTabSwitch(String link, String tabId, boolean contentVisible) {
+        Assert.assertTrue(link + " must select " + tabId, links.waitForTabSelected(tabId, LAND));
+        Assert.assertTrue(link + " must show the tab's content", contentVisible);
+        Assert.assertFalse(link + " is a tab switch - nothing may be pushed", links.isBackShownNow());
+    }
+
     @Test
     public void TC255_Verify_Explore_Deep_Link_Switches_To_Explore_Tab_Not_Push_On_Home() {
-        Assert.assertTrue("Fire aikyam://explore must succeed", links.fire("aikyam://explore"));
-        ExplorePage explore = new ExplorePage(driver);
-        Assert.assertTrue("Explore content (map/list toggle) must be visible after the tab switch",
-                explore.isExploreVisible());
-        // A tab switch leaves no Back button — only a push on the navigation stack would.
-        Assert.assertFalse("No Back button must appear after a tab switch",
-                links.isShown(links.byDesc("Back")));
-        // The bottom nav must still be visible — we are at the tab root, not inside a pushed screen.
-        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
-                new HomePage(driver).isHomeTabVisible());
+        links.fire("aikyam://explore");
+        assertTabSwitch("aikyam://explore", "tab.explore", new ExplorePage(driver).isExploreVisible());
     }
 
-    /**
-     * aikyam://music must switch to the Music tab directly, with no Back button (tab switch,
-     * not a push). The Music tab's own header must be visible.
-     */
     @Test
     public void TC256_Verify_Music_Deep_Link_Switches_To_Music_Tab_Not_Push() {
-        Assert.assertTrue("Fire aikyam://music must succeed", links.fire("aikyam://music"));
-        MusicPage music = new MusicPage(driver);
-        Assert.assertTrue("Music tab content must be visible after the link",
-                music.isMusicScreenVisible());
-        Assert.assertFalse("No Back button must appear after a tab switch",
-                links.isShown(links.byDesc("Back")));
-        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
-                new HomePage(driver).isHomeTabVisible());
+        links.fire("aikyam://music");
+        assertTabSwitch("aikyam://music", "tab.music", new MusicPage(driver).isMusicScreenVisible());
     }
 
-    /**
-     * aikyam://streams (no stream id) must stay on the Home tab and open the Live feed
-     * highlight instead of returning not-routable. Fixed by PR #699 (issue #685).
-     * Before the fix the bare host was silently dropped and nothing happened.
-     */
+    /** Bare aikyam://streams (no id) resolves to .liveTab: Home tab switched to the Live feed
+     * (StreamHighlightStore.setLiveTab). @Before leaves All Posts selected, so the switch to
+     * Live is what proves the link was handled. */
     @Test
     public void TC257_Verify_Bare_Streams_Link_Stays_On_Home_And_Opens_Live_Feed() {
-        Assert.assertTrue("Fire aikyam://streams must succeed", links.fire("aikyam://streams"));
-        // The app must stay on the Home tab; the Live feed highlight (live banner or the
-        // existing feed) must be visible — specifically, no crash and no unexpected navigation.
-        Assert.assertTrue("Home tab must remain active after a bare streams link",
-                links.isHomeFeedShown(LAND));
-        Assert.assertFalse("No push must have occurred (no Back button)",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://streams");
+        Assert.assertTrue("The Live feed must open", links.isLiveFeedShown(LAND));
+        Assert.assertTrue("Home must stay the selected tab", links.isTabSelected("tab.home"));
+        Assert.assertFalse("Nothing may be pushed", links.isBackShownNow());
     }
 
-    /**
-     * For a priest in temple context, aikyam://explore must NOT open the Orders tab.
-     * Tab id 3 is Orders for priests, so the link is not routable and the app stays
-     * wherever it was (fix from feat/aikyam-deeplinks-clean PR #698 review P2).
-     *
-     * Skipped in automated runs: switching to a priest temple account requires a dedicated
-     * priest test account and a temple context switch via PriestSettingsPage, which the
-     * current CI device pool cannot guarantee per run. Verify manually using the QA
-     * priest account documented in the team's Notion test-accounts page.
-     */
-    @Ignore("Requires dedicated priest temple test account - verify manually")
-    @Test
-    public void TC258_Verify_Explore_Deep_Link_Not_Routable_For_Priest_Temple_Account() {
-        // Switch to temple context via Settings → Account switcher (PriestSettingsPage).
-        // Fire aikyam://explore.
-        // Assert: Orders tab content must NOT be visible; Home or the previous tab stays.
-        // Assert: No Back button (no push occurred).
-        // Switch back to personal account to restore the session for subsequent tests.
-        Assert.fail("Not implemented — requires priest temple context setup");
-    }
-
-    // -------------------------------------------------------------------------
-    // TC259-TC260: remaining tab-switch deep links
-    // -------------------------------------------------------------------------
-
-    /**
-     * aikyam://events must switch to the Events tab (tab id 2) without pushing.
-     * NotificationHandler screen="events" routes here via the same tab-switch path.
-     */
     @Test
     public void TC259_Verify_Events_Deep_Link_Switches_To_Events_Tab_Not_Push() {
-        Assert.assertTrue("Fire aikyam://events must succeed", links.fire("aikyam://events"));
-        EventsPage events = new EventsPage(driver);
-        Assert.assertTrue("Events content must be visible after the tab switch",
-                events.isEventsScreenVisible());
-        Assert.assertFalse("No Back button must appear after a tab switch",
-                links.isShown(links.byDesc("Back")));
-        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
-                new HomePage(driver).isHomeTabVisible());
+        links.fire("aikyam://events");
+        assertTabSwitch("aikyam://events", "tab.events", new EventsPage(driver).isEventsScreenVisible());
     }
 
-    /**
-     * aikyam://apps must switch to the Apps tab (tab id 4) without pushing.
-     * NotificationHandler screen="settings" routes to this same tab (tab 4 = Apps).
-     */
     @Test
     public void TC260_Verify_Apps_Deep_Link_Switches_To_Apps_Tab_Not_Push() {
-        Assert.assertTrue("Fire aikyam://apps must succeed", links.fire("aikyam://apps"));
-        AppsPage apps = new AppsPage(driver);
-        Assert.assertTrue("Apps screen must be visible after the tab switch",
-                apps.isAppsScreenVisible());
-        Assert.assertFalse("No Back button must appear after a tab switch",
-                links.isShown(links.byDesc("Back")));
-        Assert.assertTrue("Bottom navigation must remain visible at the tab root",
-                new HomePage(driver).isHomeTabVisible());
+        links.fire("aikyam://apps");
+        assertTabSwitch("aikyam://apps", "tab.apps", new AppsPage(driver).isAppsScreenVisible());
     }
 
     // -------------------------------------------------------------------------
-    // TC261-TC265: feature-screen deep links (pushed onto the navigation stack)
+    // TC261-TC265: feature screens. settings/orders/family_members push onto the Home
+    // stack (RootView.deepLinkOwningTab returns 0); a mini-app opens inside the Apps tab.
     // -------------------------------------------------------------------------
 
-    /**
-     * aikyam://settings pushes the Settings hub onto the current tab's stack.
-     * Unlike tab-switch links, a Back button IS expected (it is a push route).
-     */
     @Test
     public void TC261_Verify_Settings_Deep_Link_Opens_Settings_Hub_With_Back_Button() {
-        Assert.assertTrue("Fire aikyam://settings must succeed", links.fire("aikyam://settings"));
-        SettingsPage settings = new SettingsPage(driver);
-        Assert.assertTrue("Settings hub must be reachable (Logout row visible)",
-                settings.isSettingsHubVisible());
-        Assert.assertTrue("Back button must be visible — settings is a pushed route",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://settings");
+        Assert.assertTrue("Settings hub must open", new SettingsPage(driver).isSettingsHubVisible());
+        Assert.assertTrue("Settings is pushed - Back must be offered", links.isBackShownNow());
+        Assert.assertTrue("Pushed onto the Home tab", links.isTabSelected("tab.home"));
     }
 
-    /**
-     * aikyam://orders pushes the Order History screen. This is a push route so a
-     * Back button appears. The screen title "Order History" must be visible.
-     */
     @Test
     public void TC262_Verify_Orders_Deep_Link_Opens_Order_History_With_Back_Button() {
-        Assert.assertTrue("Fire aikyam://orders must succeed", links.fire("aikyam://orders"));
-        Assert.assertTrue("Order History screen title must be visible",
-                links.waitForText("Order History", LAND));
-        Assert.assertTrue("Back button must be visible — orders is a pushed route",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://orders");
+        Assert.assertTrue("Order History must open",
+                links.waitFor(links.byText(DeepLinkPage.ORDER_HISTORY_TITLE), LAND));
+        Assert.assertTrue("Order History is pushed - Back must be offered", links.isBackShownNow());
     }
 
-    /**
-     * aikyam://family_members pushes the Family Members screen. Back button expected.
-     */
     @Test
     public void TC263_Verify_Family_Members_Deep_Link_Opens_Family_Screen_With_Back_Button() {
-        Assert.assertTrue("Fire aikyam://family_members must succeed",
-                links.fire("aikyam://family_members"));
-        FamilyMembersPage family = new FamilyMembersPage(driver);
-        Assert.assertTrue("Family Members screen must be visible",
-                family.isScreenVisible());
-        Assert.assertTrue("Back button must be visible — family members is a pushed route",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://family_members");
+        Assert.assertTrue("Family Members must open", new FamilyMembersPage(driver).isScreenVisible());
+        Assert.assertTrue("Family Members is pushed - Back must be offered", links.isBackShownNow());
     }
 
-    /**
-     * aikyam://panchang opens the Panchang mini-app web view directly (a push route,
-     * not just navigating to the Apps tab). Back button expected; web view must load.
-     */
     @Test
     public void TC264_Verify_Panchang_Deep_Link_Opens_Panchang_Mini_App_Web_View() {
-        Assert.assertTrue("Fire aikyam://panchang must succeed", links.fire("aikyam://panchang"));
-        AppsPage apps = new AppsPage(driver);
-        Assert.assertTrue("Panchang web view must load",
-                apps.waitForMiniAppWebViewToLoad());
-        Assert.assertTrue("Mini-app web view must be visible",
-                apps.isMiniAppWebViewVisible());
-        Assert.assertTrue("Back button must be visible — mini app is a pushed route",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://panchang");
+        Assert.assertTrue("The Panchang mini-app must open", links.isMiniAppShown("Panchang", LAND));
+        Assert.assertTrue("Mini-apps open inside the Apps tab", links.isTabSelected("tab.apps"));
     }
 
-    /**
-     * aikyam://stotragalu opens the Stotragalu mini-app web view (same push mechanic
-     * as panchang). Back button expected; web view must load.
-     */
     @Test
     public void TC265_Verify_Stotragalu_Deep_Link_Opens_Stotragalu_Mini_App_Web_View() {
-        Assert.assertTrue("Fire aikyam://stotragalu must succeed",
-                links.fire("aikyam://stotragalu"));
-        AppsPage apps = new AppsPage(driver);
-        Assert.assertTrue("Stotragalu web view must load",
-                apps.waitForMiniAppWebViewToLoad());
-        Assert.assertTrue("Mini-app web view must be visible",
-                apps.isMiniAppWebViewVisible());
-        Assert.assertTrue("Back button must be visible — mini app is a pushed route",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://stotragalu");
+        Assert.assertTrue("The Stotragalu mini-app must open", links.isMiniAppShown("Stotragalu", LAND));
+        Assert.assertTrue("Mini-apps open inside the Apps tab", links.isTabSelected("tab.apps"));
     }
 
     // -------------------------------------------------------------------------
-    // TC266-TC268: entity deep links that need live test data (@Ignore until IDs are stable)
+    // TC266-TC268: entity links. Music ids are dev-catalogue data (TestData); the stream id
+    // is compiled into the app's fallback list, so TC268 always runs.
     // -------------------------------------------------------------------------
 
-    /**
-     * aikyam://music/tracks/{id} opens the music track in the Music tab's player.
-     * The Music deep link goes through MusicDeepLinkStore (not appRoute), so the tab
-     * switches to Music and the track auto-plays.
-     *
-     * Skipped: requires a stable track id from the dev/staging music catalogue.
-     * To enable: replace TRACK_ID with a real id from the Music tab and remove @Ignore.
-     */
-    @Ignore("Needs stable track id from dev catalogue — replace TRACK_ID and remove @Ignore")
     @Test
     public void TC266_Verify_Music_Track_Deep_Link_Opens_Track_In_Music_Tab() {
-        final String TRACK_ID = "TRACK_ID";
-        Assert.assertTrue(links.fire("aikyam://music/tracks/" + TRACK_ID));
-        MusicPage music = new MusicPage(driver);
-        Assert.assertTrue("Music tab must be active after a track deep link",
-                music.isMusicScreenVisible());
-        // The player or now-playing bar must surface the track — verify via a known
-        // accessibility id once you have an id from the dev catalogue.
-        Assert.assertFalse("No Back button at the Music tab root",
-                links.isShown(links.byDesc("Back")));
+        Assume.assumeTrue(TestData.missing("musicTrackId"), TestData.isSet(TestData.MUSIC_TRACK_ID));
+        links.fire("aikyam://music/tracks/" + TestData.MUSIC_TRACK_ID);
+        Assert.assertTrue("Track links are handled by the Music tab", links.waitForTabSelected("tab.music", LAND));
+        Assert.assertTrue("The track's player must open", new MusicPage(driver).isFullPlayerVisible());
     }
 
-    /**
-     * aikyam://music/albums/{id} opens the music album in the Music tab.
-     *
-     * Skipped: requires a stable album id from the dev/staging music catalogue.
-     */
-    @Ignore("Needs stable album id from dev catalogue — replace ALBUM_ID and remove @Ignore")
     @Test
     public void TC267_Verify_Music_Album_Deep_Link_Opens_Album_In_Music_Tab() {
-        final String ALBUM_ID = "ALBUM_ID";
-        Assert.assertTrue(links.fire("aikyam://music/albums/" + ALBUM_ID));
-        MusicPage music = new MusicPage(driver);
-        Assert.assertTrue("Music tab must be active after an album deep link",
-                music.isMusicScreenVisible());
-        Assert.assertFalse("No Back button at the Music tab root",
-                links.isShown(links.byDesc("Back")));
+        Assume.assumeTrue(TestData.missing("musicAlbumId"), TestData.isSet(TestData.MUSIC_ALBUM_ID));
+        links.fire("aikyam://music/albums/" + TestData.MUSIC_ALBUM_ID);
+        Assert.assertTrue("Album links are handled by the Music tab", links.waitForTabSelected("tab.music", LAND));
+        Assert.assertTrue("The album's details must open", new MusicPage(driver).isAlbumDetailsVisible());
     }
 
-    /**
-     * aikyam://streams/{id} with a valid YouTube live stream id opens the live stream
-     * player (YouTubeLivePlayerView). Without a valid id the app falls back to .liveTab
-     * (TC257 covers that). Requires an active or archived YouTube stream on the platform.
-     *
-     * Notification scenario equivalent: a push notification carrying liveId="{id}" or
-     * deeplink="aikyam://streams/{id}" in its payload routes here via the same player.
-     *
-     * Skipped: live streams are transient; pin a known stream id from your QA environment
-     * and remove @Ignore for local verification.
-     */
-    @Ignore("Needs an active/archived stream id — pin one from QA env and remove @Ignore")
     @Test
     public void TC268_Verify_Stream_Id_Deep_Link_Opens_Live_Stream_Player() {
-        final String STREAM_ID = "STREAM_ID";
-        Assert.assertTrue(links.fire("aikyam://streams/" + STREAM_ID));
-        // The live stream player shows a video player UI. Assert a known element such as
-        // a close/back action or the player container's accessibility id once you have a
-        // real stream id.
-        Assert.assertTrue("Stream player must open (live or replay)",
-                links.waitFor(links.byDesc("Back"), LAND)
-                        || links.isShown(links.byDesc("Close")));
-        Assert.assertFalse("Home feed must not be shown — player is open",
-                links.isHomeFeedShown(Duration.ofSeconds(3)));
+        links.fire("aikyam://streams/" + TestData.STREAM_VIDEO_ID_ISKCON);
+        Assert.assertTrue("The player for that stream must open",
+                links.isLivePlayerShown(LAND));
     }
 
     // -------------------------------------------------------------------------
-    // TC269, TC271-TC278: negative / edge-case deep link flows
-    //
-    // Every routable destination should handle bad or missing data gracefully —
-    // no crash, no unintended navigation. Covers the notification deep link
-    // equivalent scenarios (a notification's liveId, deeplink or screen field
-    // with a bad value routes through the same resolution path as a URL fire).
+    // TC269, TC271-TC278: bad or missing data. A rejected link is asserted with
+    // staysOnHome(SETTLE) - Home stays selected with nothing pushed for the whole window -
+    // because checking Home right after firing passes before the link is even processed.
     // -------------------------------------------------------------------------
 
-    /**
-     * aikyam://streams/{unknownId} — ShareLinkRouter calls resolveStream, the API
-     * returns nothing, the static fallback list has no match either, so the router
-     * returns nil and falls back to .liveTab (Home tab, Live feed highlight).
-     *
-     * Notification equivalent: a push notification with liveId="doesnotexist123"
-     * or deeplink="aikyam://streams/doesnotexist123" in its payload routes through
-     * the same resolveStream call and falls back the same way.
-     */
+    /** An unknown stream id is still routed: resolveStream finds nothing and the router
+     * falls back to .liveTab - Home showing the Live feed. */
     @Test
-    public void TC269_Verify_Unknown_Stream_Id_Falls_Back_To_Home_Without_Crash() {
-        Assert.assertTrue(links.fire("aikyam://streams/doesnotexist123"));
-        Assert.assertTrue("Unknown stream id must fall back to Home/Live feed, not crash",
-                links.isHomeFeedShown(LAND));
-        Assert.assertFalse("No Back button — no push happened",
-                links.isShown(links.byDesc("Back")));
+    public void TC269_Verify_Unknown_Stream_Id_Falls_Back_To_Live_Feed_Without_Crash() {
+        links.fire("aikyam://streams/" + UNKNOWN);
+        Assert.assertTrue("Unknown stream must fall back to the Live feed",
+                links.isLiveFeedShown(LAND));
+        Assert.assertTrue("Home must stay the selected tab", links.isTabSelected("tab.home"));
+        Assert.assertFalse("No player may open", links.isBackShownNow());
     }
 
-    /**
-     * aikyam://music/tracks/{unknownId} — the ID format is valid so the router
-     * emits .musicTrack, MusicDeepLinkStore receives it, switches to the Music
-     * tab and attempts to load the track. The track is not found, but the app
-     * must not crash and the Music tab must remain active.
-     *
-     * Notification equivalent: deeplink="aikyam://music/tracks/doesnotexist123"
-     * in a notification payload routes here via the same MusicDeepLinkStore path.
-     */
     @Test
     public void TC271_Verify_Unknown_Music_Track_Id_Does_Not_Crash_Music_Tab_Active() {
-        Assert.assertTrue(links.fire("aikyam://music/tracks/doesnotexist123"));
-        MusicPage music = new MusicPage(driver);
-        Assert.assertTrue("Music tab must be active even when the track id is unknown",
-                music.isMusicScreenVisible());
-        Assert.assertFalse("No Back button — Music tab is selected, not pushed from Home",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://music/tracks/" + UNKNOWN);
+        Assert.assertTrue("Track links are handled by the Music tab even when the id is unknown",
+                links.waitForTabSelected("tab.music", LAND));
+        Assert.assertTrue("Music must still render", new MusicPage(driver).isMusicScreenVisible());
     }
 
-    /**
-     * aikyam://music/albums/{unknownId} — same as TC271 but for album ids.
-     * The router emits .musicAlbum, the album is not found, Music tab stays active.
-     */
     @Test
     public void TC272_Verify_Unknown_Music_Album_Id_Does_Not_Crash_Music_Tab_Active() {
-        Assert.assertTrue(links.fire("aikyam://music/albums/doesnotexist123"));
-        MusicPage music = new MusicPage(driver);
-        Assert.assertTrue("Music tab must be active even when the album id is unknown",
-                music.isMusicScreenVisible());
-        Assert.assertFalse("No Back button",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://music/albums/" + UNKNOWN);
+        Assert.assertTrue("Album links are handled by the Music tab even when the id is unknown",
+                links.waitForTabSelected("tab.music", LAND));
+        Assert.assertTrue("Music must still render", new MusicPage(driver).isMusicScreenVisible());
     }
 
-    /**
-     * aikyam://music/tracks (no id segment) — ShareLinkRouter.aikyamNoIdDestination
-     * requires at least 2 path segments with a valid id; this URL has 1 segment so the
-     * router returns nil (not routable). The app must stay on Home, no navigation at all.
-     *
-     * Notification equivalent: a deeplink payload of "aikyam://music/tracks" (truncated)
-     * is not routable and the app falls through to the notification's screen field.
-     */
+    /** aikyamNoIdDestination needs a sub-path AND an id under music; one segment is nil. */
     @Test
     public void TC273_Verify_Music_Tracks_Without_Id_Is_Not_Routable_App_Stays_On_Home() {
-        Assert.assertTrue(links.fire("aikyam://music/tracks"));
-        Assert.assertTrue("No id = not routable; Home feed must remain showing",
-                links.isHomeFeedShown(Duration.ofSeconds(15)));
-        Assert.assertFalse("No Back button",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://music/tracks");
+        Assert.assertTrue("Not routable - Home must stay, nothing pushed", links.staysOnHome(SETTLE));
     }
 
-    /**
-     * aikyam://music/albums (no id segment) — mirrors TC273 for albums.
-     */
     @Test
     public void TC274_Verify_Music_Albums_Without_Id_Is_Not_Routable_App_Stays_On_Home() {
-        Assert.assertTrue(links.fire("aikyam://music/albums"));
-        Assert.assertTrue("No id = not routable; Home feed must remain showing",
-                links.isHomeFeedShown(Duration.ofSeconds(15)));
-        Assert.assertFalse("No Back button",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://music/albums");
+        Assert.assertTrue("Not routable - Home must stay, nothing pushed", links.staysOnHome(SETTLE));
     }
 
-    /**
-     * aikyam://unknownscreen — the host is not in ShareLinkRouter's switch statement,
-     * so it returns nil. The app must stay on Home, no navigation, no crash.
-     *
-     * Notification equivalent: a notification payload with an unrecognised screen value
-     * or an unknown deeplink host must leave the app on whatever screen it was on.
-     */
     @Test
     public void TC275_Verify_Unrecognised_Deep_Link_Host_Is_Ignored_App_Stays_On_Home() {
-        Assert.assertTrue(links.fire("aikyam://doesnotexist"));
-        Assert.assertTrue("Unrecognised host must be ignored; Home feed must remain showing",
-                links.isHomeFeedShown(Duration.ofSeconds(15)));
-        Assert.assertFalse("No Back button — nothing navigated",
-                links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://" + UNKNOWN);
+        Assert.assertTrue("Unknown host - Home must stay, nothing pushed", links.staysOnHome(SETTLE));
     }
 
-    /**
-     * aikyam://panchang/extrapath — the router's no-id handler guards
-     * `segments.isEmpty` for single-destination hosts like panchang, settings, etc.
-     * Any extra path segment makes the URL not routable: the app stays on Home.
-     *
-     * Also covers the same guard for aikyam://settings/x, aikyam://orders/x (without
-     * a valid orders id), aikyam://explore/x, aikyam://events/x and aikyam://apps/x.
-     */
+    /** No-id hosts require an empty path, and none of these hosts is an entity type, so an
+     * extra segment is not routable. aikyam://events/x is deliberately NOT here: "events" IS
+     * an entity type, so that URL opens event details (TC305 relies on exactly that). */
     @Test
     public void TC276_Verify_Extra_Path_On_Single_Destination_Host_Is_Not_Routable() {
-        for (String url : new String[]{
-                "aikyam://panchang/doesnotexist",
-                "aikyam://settings/doesnotexist",
-                "aikyam://explore/doesnotexist",
-                "aikyam://events/doesnotexist",
-                "aikyam://apps/doesnotexist",
-        }) {
-            Assert.assertTrue("fire must succeed for: " + url, links.fire(url));
-            Assert.assertTrue("Extra path segment makes link non-routable; Home must stay: " + url,
-                    links.isHomeFeedShown(Duration.ofSeconds(15)));
-            Assert.assertFalse("No Back button for: " + url,
-                    links.isShown(links.byDesc("Back")));
+        for (String host : new String[] {"panchang", "settings", "explore", "apps"}) {
+            String url = "aikyam://" + host + "/" + UNKNOWN;
+            links.fire(url);
+            Assert.assertTrue("Not routable - Home must stay, nothing pushed: " + url, links.staysOnHome(SETTLE));
         }
     }
 
-    /**
-     * aikyam://music/tracks/{malformedId} — the id contains characters outside
-     * [A-Za-z0-9_-] so ShareLinkRouter.isValidId returns false and the router
-     * returns nil (not routable). The app must stay on Home.
-     *
-     * Notification equivalent: a deeplink payload with a path-encoded special
-     * character in the id (e.g. from a malformed notification) must not crash.
-     */
+    /** Space and ! fail ShareLinkRouter.isValidId. */
     @Test
     public void TC277_Verify_Malformed_Music_Track_Id_Is_Not_Routable_App_Stays_On_Home() {
-        // Space (URL-encoded as %20) and ! are outside the allowed id charset.
-        Assert.assertTrue(links.fire("aikyam://music/tracks/bad%20track%21"));
-        Assert.assertTrue("Malformed id = not routable; Home feed must remain showing",
-                links.isHomeFeedShown(Duration.ofSeconds(15)));
-        Assert.assertFalse("No Back button", links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://music/tracks/bad%20track%21");
+        Assert.assertTrue("Malformed id - Home must stay, nothing pushed", links.staysOnHome(SETTLE));
     }
 
-    /**
-     * aikyam://streams/{malformedId} — space-encoded id fails isValidId, router
-     * returns nil from aikyamNoIdDestination. Because the host is "streams" in the
-     * no-id route branch (empty-path guard), a non-empty path makes the whole URL
-     * not routable: the app stays on Home.
-     *
-     * Also documents that a notification payload deeplink="aikyam://streams/%20"
-     * (blank or whitespace id) must not crash and must leave the app on Home.
-     */
     @Test
     public void TC278_Verify_Malformed_Stream_Id_Is_Not_Routable_App_Stays_On_Home() {
-        Assert.assertTrue(links.fire("aikyam://streams/bad%20id%21"));
-        Assert.assertTrue("Malformed stream id = not routable; Home feed must remain showing",
-                links.isHomeFeedShown(Duration.ofSeconds(15)));
-        Assert.assertFalse("No Back button", links.isShown(links.byDesc("Back")));
+        links.fire("aikyam://streams/bad%20id%21");
+        Assert.assertTrue("Malformed id - Home must stay, nothing pushed", links.staysOnHome(SETTLE));
     }
 
     // -------------------------------------------------------------------------
-    // TC304-TC308: edge cases introduced or fixed by PR #698
+    // TC304-TC307: behaviour fixed by iOS PR #698
     // -------------------------------------------------------------------------
 
-    /**
-     * Mini-app switch via deep link while a different mini-app is already open.
-     *
-     * Before the fix SwiftUI reused the same MiniAppScreen instance when the route
-     * changed from .miniApp("panchang") to .miniApp("stotragalu"), so the WebView
-     * never reloaded. The fix adds .id(id) to MiniAppScreen inside inTabSearchOverlay,
-     * forcing a full teardown + rebuild when the miniAppId changes.
-     *
-     * Flow:
-     *   1. Fire aikyam://panchang → Panchang web view loads.
-     *   2. Fire aikyam://stotragalu without backing out of Panchang.
-     *   3. Assert: Stotragalu content is now showing (web view reloaded for the new id).
-     *   4. Assert: Panchang content is NOT still visible (old view was destroyed).
-     */
+    /** MiniAppScreen is keyed by .id(miniAppId); without it SwiftUI reused the Panchang web
+     * view when the route changed to Stotragalu. The mini-app id on the web view proves which
+     * one is loaded. */
     @Test
     public void TC304_Verify_Mini_App_Switch_Via_Deeplink_Reloads_New_Mini_App() {
-        // Open Panchang.
-        Assert.assertTrue("Fire aikyam://panchang must succeed", links.fire("aikyam://panchang"));
-        AppsPage apps = new AppsPage(driver);
-        Assert.assertTrue("Panchang web view must load first",
-                apps.waitForMiniAppWebViewToLoad());
-
-        // Switch to Stotragalu via deep link while Panchang is still open.
-        Assert.assertTrue("Fire aikyam://stotragalu must succeed",
-                links.fire("aikyam://stotragalu"));
-
-        // The web view must have torn down and rebuilt for the new mini-app id.
-        Assert.assertTrue("Stotragalu web view must load after the switch",
-                apps.waitForMiniAppWebViewToLoad());
-        // The mini-app overlay is still open (no Back was pressed), so web view visible.
-        Assert.assertTrue("Mini-app web view must be visible",
-                apps.isMiniAppWebViewVisible());
-        // If still showing Panchang the fix did not apply; content of the two mini-apps
-        // differs enough that asserting the new URL loaded via the web view title or URL
-        // bar is the gold standard — verify with apps.miniAppCurrentHost() once the page
-        // object exposes it. For now, asserting a successful second load within timeout
-        // and no crash is the minimum bar.
+        links.fire("aikyam://panchang");
+        Assert.assertTrue("Panchang must open first", links.isMiniAppShown("Panchang", LAND));
+        links.fire("aikyam://stotragalu");
+        Assert.assertTrue("Stotragalu must replace it", links.isMiniAppShown("Stotragalu", LAND));
+        Assert.assertFalse("Panchang must be gone", links.isMiniAppShown("Panchang", Duration.ZERO));
     }
 
-    /**
-     * Tab-switch deep link resets the navigation stack of the target tab.
-     *
-     * When the user has pushed screens inside the Music tab (e.g., navigated into an
-     * artist view), firing aikyam://music must switch to the Music tab AND pop the
-     * entire stack back to its root — no Back button, no pushed screen in view.
-     *
-     * Fixed in feat/aikyam-deeplinks-clean: tab-switch destinations call
-     * NavigationPath() (empty) before switching, clearing whatever was on the stack.
-     */
+    /** A tab-switch link clears the target tab's stack (pathsByTab[tab] = NavigationPath()).
+     * aikyam://events/<id> pushes event details onto the Events tab; aikyam://events must then
+     * land on the Events root, not on top of that pushed screen. */
     @Test
     public void TC305_Verify_Tab_Switch_Deeplink_Resets_Navigation_Stack_To_Root() {
-        // Navigate to the Music tab and push into the first available sub-screen.
-        // If the Music tab has no immediately tappable sub-screen in the test env,
-        // navigate to Events (which always has a list) and use aikyam://events instead.
-        Assert.assertTrue("Fire aikyam://events must succeed", links.fire("aikyam://events"));
-        EventsPage events = new EventsPage(driver);
-        Assert.assertTrue("Events tab must be visible", events.isEventsScreenVisible());
-
-        // Now fire aikyam://events again (simulates re-entering from a notification or
-        // share link while already on Events). The stack must be at root — no Back button.
-        Assert.assertTrue("Fire aikyam://events second time must succeed",
-                links.fire("aikyam://events"));
-        Assert.assertTrue("Events content must be showing after the second switch",
-                events.isEventsScreenVisible());
-        Assert.assertFalse("No Back button — tab is at its root after a tab-switch link",
-                links.isShown(links.byDesc("Back")));
-        Assert.assertTrue("Bottom navigation must still be visible",
-                new HomePage(driver).isHomeTabVisible());
+        links.fire("aikyam://events/" + UNKNOWN);
+        Assert.assertTrue("Event details belong to the Events tab", links.waitForTabSelected("tab.events", LAND));
+        Assert.assertTrue("Event details are pushed - Back must show", links.waitFor(links.byDesc("Back"), LAND));
+        links.fire("aikyam://events");
+        Assert.assertTrue("The Events root must show", new EventsPage(driver).isEventsScreenVisible());
+        Assert.assertFalse("The pushed screen must be cleared", links.isBackShownNow());
     }
 
-    /**
-     * Bare aikyam://streams selects the Live chip, not just the Home tab.
-     *
-     * Before PR #698 / #699: the app switched to the Home tab but left All Posts
-     * selected. StreamHighlightStore.pendingLiveTab was introduced so that
-     * showPendingLiveStream() activates the Live chip the same way a push-tap does.
-     *
-     * Assertion: after TC257's tab-switch, the Live chip (accessibility id
-     * "feed.filter.live") is selected, not the All Posts chip.
-     */
-    @Test
-    public void TC306_Verify_Bare_Streams_Link_Activates_Live_Chip_On_Home_Feed() {
-        // Start from All Posts (set by @Before's tapAllPostsFilter).
-        Assert.assertTrue("Fire aikyam://streams must succeed", links.fire("aikyam://streams"));
-        Assert.assertTrue("Home tab must be active", links.isHomeFeedShown(LAND));
-        // The Live chip must be selected — not the All Posts chip.
-        Assert.assertTrue("Live chip must be selected after aikyam://streams",
-                links.isShown(links.byDesc("feed.filter.live")));
-        Assert.assertFalse("All Posts chip must NOT be selected after aikyam://streams",
-                links.isShown(links.byDesc("feed.filter.allPosts")));
-    }
-
-    /**
-     * Cross-tab deep link: aikyam://explore from a non-Home tab.
-     *
-     * Fires aikyam://events first (switches to Events tab), then fires
-     * aikyam://explore. The app must switch to the Explore tab regardless of
-     * which tab it was on when the link arrived.
-     *
-     * Covers the general tab-switch contract: the deep link handler in routeDeepLink
-     * uses the ShareDestination.tabIndex path regardless of the current tab state.
-     */
     @Test
     public void TC307_Verify_Explore_Deep_Link_From_Non_Home_Tab_Switches_To_Explore() {
-        // Start on Events tab.
-        Assert.assertTrue("Fire aikyam://events must succeed", links.fire("aikyam://events"));
-        new EventsPage(driver).isEventsScreenVisible();
-
-        // Now switch to Explore from Events tab via deep link.
-        Assert.assertTrue("Fire aikyam://explore must succeed", links.fire("aikyam://explore"));
-        ExplorePage explore = new ExplorePage(driver);
-        Assert.assertTrue("Explore content must be visible after cross-tab switch",
-                explore.isExploreVisible());
-        Assert.assertFalse("No Back button — Explore is a tab switch, not a push",
-                links.isShown(links.byDesc("Back")));
-        Assert.assertTrue("Bottom navigation must remain visible",
-                new HomePage(driver).isHomeTabVisible());
-    }
-
-    /**
-     * Mini-app link triggered from within a mini-app navigates the main app.
-     *
-     * MiniAppWebViewController.decision() previously blocked all navigations except
-     * the initial load. The fix adds a linkActivated case: when the web view follows
-     * a link that starts with "aikyam://", the view controller calls
-     * UIApplication.open so the main app routing handles it. Script-initiated
-     * navigations are still blocked.
-     *
-     * Manual verification flow:
-     *   1. Open aikyam://panchang.
-     *   2. Inside the Panchang web view, tap a link that emits aikyam://music.
-     *   3. Assert: Music tab becomes active, Panchang web view is dismissed.
-     *
-     * Skipped in automated runs: Appium cannot reliably tap a link that is embedded
-     * in a WebView's HTML content without knowing the link's coordinates or
-     * accessibility id from the web page source (which varies by content release).
-     * Verify this manually using the QA Panchang page that has an "Open Music" link
-     * documented in the team's Notion QA playbook for PR #698.
-     */
-    /**
-     * TC315 — G1: PR #698 guards ALL tab-switch destinations behind isCurrentContextPriestTemple.
-     * TC258 covers only aikyam://explore for a priest account; this stub covers the remaining
-     * tab-switch cases (music, events, apps). A regression re-enabling any of them for priests
-     * would not be caught without this test.
-     *
-     * Skipped: requires switching the app to a priest temple context (Settings → Account switcher).
-     * Verify manually using the QA priest account documented in Notion test accounts.
-     */
-    @Ignore("Requires dedicated priest temple test account — verify manually for aikyam://music, aikyam://events, aikyam://apps")
-    @Test
-    public void TC315_Verify_All_Tab_Switch_Deeplinks_Blocked_For_Priest_Temple_Account() {
-        // Switch to priest temple context (manual step — account switcher in Settings).
-        // Fire each tab-switch deeplink and assert the app stays on Home, not on the target tab.
-        for (String link : new String[]{"aikyam://music", "aikyam://events", "aikyam://apps"}) {
-            Assert.assertTrue("Fire " + link + " must succeed", links.fire(link));
-            links.waitFor(links.byDesc("tab.home"), Duration.ofSeconds(5));
-            Assert.assertFalse(link + " must NOT switch tab for priest account — music tab must NOT appear",
-                    new MusicPage(driver).isMusicScreenVisible());
-            Assert.assertFalse(link + " must NOT switch tab for priest account — events tab must NOT appear",
-                    links.isShown(links.byDesc("tab.events")));
-        }
-        Assert.fail("Not implemented — requires priest temple context setup");
-    }
-
-    @Ignore("Requires a known link target in the Panchang web content — verify manually per QA playbook")
-    @Test
-    public void TC308_Verify_Aikyam_Link_From_Within_Mini_App_Navigates_Main_App() {
-        Assert.assertTrue("Fire aikyam://panchang must succeed", links.fire("aikyam://panchang"));
-        AppsPage apps = new AppsPage(driver);
-        Assert.assertTrue("Panchang web view must load", apps.waitForMiniAppWebViewToLoad());
-        // Tap the in-page "Open Music" link (Panchang must expose a known QA link).
-        // apps.tapLinkInWebView("Open Music");
-        // Assert Music tab is active.
-        Assert.assertTrue("Music tab must become active after tapping aikyam://music link in Panchang",
-                new MusicPage(driver).isMusicScreenVisible());
-        Assert.assertFalse("No Back button — Music tab switch, not a push",
-                links.isShown(links.byDesc("Back")));
-        Assert.fail("Not implemented — replace with real web view link tap per QA playbook");
+        links.fire("aikyam://events");
+        Assert.assertTrue("Start on the Events tab", links.waitForTabSelected("tab.events", LAND));
+        links.fire("aikyam://explore");
+        assertTabSwitch("aikyam://explore", "tab.explore", new ExplorePage(driver).isExploreVisible());
+        Assert.assertFalse("Events must no longer be selected", links.isTabSelected("tab.events"));
     }
 }
