@@ -10,6 +10,7 @@ import com.shriaikyam.aikyam.pages.ProfilePage;
 import com.shriaikyam.aikyam.pages.SettingsPage;
 import com.shriaikyam.aikyam.utils.DeviceControl;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
@@ -44,6 +45,16 @@ public class NotificationJourneyTest extends BaseTest {
     private static final String SHIRDI = TestData.STREAM_VIDEO_ID_SHIRDI;
     private static final String BANNER_MISSED = "The banner never appeared - is notification permission "
             + "granted for the dev bundle? (applesimutils grants it; see README)";
+
+    @Override
+    protected boolean reuseDriverAcrossTests() {
+        return true;
+    }
+
+    @AfterClass
+    public static void tearDownClass() {
+        releaseSharedDriver();
+    }
 
     private static boolean permissionGranted;
 

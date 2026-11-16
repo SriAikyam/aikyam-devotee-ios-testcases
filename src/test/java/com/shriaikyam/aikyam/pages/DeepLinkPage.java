@@ -139,7 +139,18 @@ public class DeepLinkPage extends BasePage {
     }
 
     public boolean isBackShownNow() {
-        return isDisplayedNow(driver, byDesc("Back"));
+        // The iOS back button carries name="chevron.left" and label="Back"; match by label.
+        return isDisplayedNow(driver, byText("Back"));
+    }
+
+    /** Polls until the Back button (label="Back") is gone, or the timeout elapses. */
+    public boolean waitForBackGone(Duration timeout) {
+        try {
+            return new WebDriverWait(driver, timeout).ignoring(StaleElementReferenceException.class)
+                    .until(d -> d.findElements(byText("Back")).stream().noneMatch(WebElement::isDisplayed));
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /** All Posts is the strip's first column; @Before starts every case from it. */
@@ -153,10 +164,13 @@ public class DeepLinkPage extends BasePage {
     }
 
     /** SmoothFeedView's Live mode: its filter row ("LIVE NOW") or, with nothing live, the
-     * empty state. Neither exists in All Posts, so this is what a Live-tab route changes. */
+     * empty state. Neither exists in All Posts, so this is what a Live-tab route changes.
+     * "LIVE NOW" is clipped off-screen in the horizontal scroll view (visible=false in the
+     * accessibility tree), so we also accept visible "LIVE" badge labels on stream cards. */
     public boolean isLiveFeedShown(Duration timeout) {
         return waitFor(AppiumBy.iOSNsPredicateString(
-                "label == 'LIVE NOW' OR label == 'No live events'"), timeout);
+                "label == 'LIVE NOW' OR label == 'No live events'" +
+                " OR (label == 'LIVE' AND type == 'XCUIElementTypeStaticText')"), timeout);
     }
 
     /** PostDetailView's error state - 404 reads "no longer available", other failures
@@ -170,8 +184,16 @@ public class DeepLinkPage extends BasePage {
      * detail has no web view and a mini-app has no native Back, so the pair is the player. */
     public boolean isLivePlayerShown(Duration timeout) {
         By webView = AppiumBy.iOSClassChain("**/XCUIElementTypeWebView");
+        By backByLabel = byText("Back");
         return poll(() -> isDisplayedNow(driver, id("livePlayer.screen"))
-                || (isDisplayedNow(driver, webView) && isBackShownNow()), timeout);
+                || (isDisplayedNow(driver, webView) && isDisplayedNow(driver, backByLabel)), timeout);
+    }
+
+    /** Any visible WebView on the Apps tab — proves a mini-app is loaded regardless of its
+     * document title (the title may be localised or changed by the app's JavaScript router). */
+    public boolean isAnyMiniAppShown(Duration timeout) {
+        By webView = AppiumBy.iOSClassChain("**/XCUIElementTypeWebView");
+        return waitFor(webView, timeout) && isTabSelected("tab.apps");
     }
 
     /** A bundled mini-app's web view, recognised by its page: the web view takes the document
