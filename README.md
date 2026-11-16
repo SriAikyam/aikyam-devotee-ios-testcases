@@ -41,6 +41,11 @@ cd AppiumTests
 Optional properties: `appium.serverUrl`, `appium.bundleId`, `appium.deviceName`,
 `appium.platformVersion`, `appium.worker`.
 
+`LiveChantTest` is opt-in because every case starts a real chant on the shared dev backend:
+`-Dlivechant.enabled=true` (any test task). Run it on one shard only, never split across
+`appium.worker` shards. Also: `livechant.japaTrack`, `livechant.otherTrack` (a non-japa track),
+`livechant.long=true` for TC357 and `livechant.backgroundMinutes` (default 30).
+
 Read the verdict from the JUnit XML in `build/test-results/<task>/`. Failure screenshots and
 page sources are saved to `build/test-results/diagnostics/<TestClass>/`.
 

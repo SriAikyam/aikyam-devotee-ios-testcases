@@ -20,12 +20,11 @@ import java.util.regex.Pattern;
 public class LiveChantPage extends BasePage {
 
     public static final String START_OPTION = "Start Live Chant";
+    // Sheet titles tell the three sheets apart, so they are matched exactly; the bodies are only
+    // checked for being non-empty, so a copy tweak there does not fail five tests.
     public static final String START_TITLE = "Start a Live Chant?";
-    public static final String START_BODY =
-            "Share it so other devotees can join. It starts for everyone when you tap Start Chant.";
     public static final String END_TITLE = "End this Live Chant?";
     public static final String SWITCH_TITLE = "End your Live Chant to play this?";
-    public static final String END_BODY = "It ends for everyone chanting with you.";
 
     private final By badge = id("livechant.badge");
     private final By primary = id("livechant.primary");
@@ -43,6 +42,10 @@ public class LiveChantPage extends BasePage {
     private final By sheetBody = id("livechant.sheet.body");
     private final By sheetConfirm = id("livechant.sheet.confirm");
     private final By sheetCancel = id("livechant.sheet.cancel");
+    private final By sheetCount = id("livechant.sheet.count");
+    // The chant's progress bar has no identifier: its elapsed and duration labels are plain "m:ss" text.
+    private final By timeLabel = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeStaticText' AND label MATCHES '[0-9]+:[0-9]{2}'");
     private final By miniLive = id("music.miniPlayer.live");
     private final By moreOptions = AppiumBy.iOSNsPredicateString(
             "type == 'XCUIElementTypeButton' AND label == 'More options'");
@@ -106,6 +109,11 @@ public class LiveChantPage extends BasePage {
 
     public boolean cancelSheet() {
         return tapFirstVisible(sheetCancel);
+    }
+
+    /** The japa count picker: the start sheet shows it only for a japa track. */
+    public boolean isCountPickerVisible() {
+        return isVisibleNow(sheetCount);
     }
 
     public boolean isSheetGone() {
@@ -201,6 +209,16 @@ public class LiveChantPage extends BasePage {
         return m.matches() ? Integer.parseInt(m.group(1)) : -1;
     }
 
+    /** Elapsed seconds on the chant's progress bar (the first "m:ss" label), or -1 if none shows. */
+    public int positionSeconds() {
+        String value = labelOf(timeLabel);
+        if (value == null) {
+            return -1;
+        }
+        String[] parts = value.trim().split(":");
+        return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+    }
+
     public boolean isJapaVisible() {
         return isVisibleNow(japa);
     }
@@ -261,7 +279,7 @@ public class LiveChantPage extends BasePage {
     /** Waits until the badge's label settles on `expected` (or times out). */
     public boolean waitForBadge(String expected) {
         try {
-            new WebDriverWait(driver, Duration.ofSeconds(20))
+            new WebDriverWait(driver, DEFAULT_TIMEOUT)
                     .until(ignored -> expected.equals(labelOf(badge)));
             return true;
         } catch (RuntimeException timeout) {
