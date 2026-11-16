@@ -15,6 +15,9 @@ SwiftUI views (`<screen>.<element>`, e.g. `tab.home`, `feed.post.like`).
 - JDK 17+
 - Appium 3.x with the XCUITest driver (`appium driver install xcuitest`), default
   `http://127.0.0.1:4723`
+- AppleSimulatorUtils (`brew tap wix/brew && brew install applesimutils`) for the push
+  notification cases: the app only asks for notification permission after a follow or a
+  post, so `NotificationJourneyTest` grants it through `mobile: setPermission`
 - The **Dev-Debug** build (`AikyamDevotee-Dev` scheme, bundle `com.shriaikyam.ikyam.dev`)
   installed on the simulator and already logged in. Never run against the prod bundle.
 
@@ -40,6 +43,10 @@ cd AppiumTests
 
 Optional properties: `appium.serverUrl`, `appium.bundleId`, `appium.deviceName`,
 `appium.platformVersion`, `appium.worker`.
+
+Cases that need a dev-catalogue entity id are skipped (with the reason) until it is supplied:
+`-Dtestdata.postId=`, `-Dtestdata.userId=`, `-Dtestdata.musicTrackId=`,
+`-Dtestdata.musicAlbumId=` (see `data/TestData.java` for how to find one).
 
 Read the verdict from the JUnit XML in `build/test-results/<task>/`. Failure screenshots and
 page sources are saved to `build/test-results/diagnostics/<TestClass>/`.

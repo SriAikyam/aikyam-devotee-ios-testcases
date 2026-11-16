@@ -371,3 +371,10 @@ tasks.register("regressionReport") {
         }
     }
 }
+
+// Entity ids for the data-dependent cases (see TestData): -Dtestdata.postId=... etc. reach the
+// forked test JVM, so a run can enable them without a code change.
+tasks.withType<Test>().configureEach {
+    System.getProperties().stringPropertyNames().filter { it.startsWith("testdata.") }
+        .forEach { key -> systemProperty(key, System.getProperty(key)) }
+}

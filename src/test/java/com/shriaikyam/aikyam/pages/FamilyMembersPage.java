@@ -48,7 +48,8 @@ public class FamilyMembersPage extends BasePage {
     }
 
     public boolean isScreenVisible() {
-        return isAnyVisible(memberCountChip, newMemberFormHeader, saveMembersAction);
+        return isAnyVisible(memberCountChip, newMemberFormHeader, saveMembersAction,
+                idOrNavTitle("family.title", "Family Members"));
     }
 
     /** Unambiguously "still on Family Members", for the after-navigating-away check. */

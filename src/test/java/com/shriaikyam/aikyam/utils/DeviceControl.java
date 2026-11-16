@@ -19,6 +19,10 @@ public final class DeviceControl {
                     + "priest temple membership). The physical test phone is signed into a "
                     + "real account where that data does not exist. Runs on a simulator only.";
 
+    public static final String SIMULATOR_ONLY_PUSH =
+            "Delivers notifications with `xcrun simctl push`, which only reaches a simulator. "
+                    + "Runs on a simulator only.";
+
     /** True when this run targets a simulator. A simulator udid is an uppercase hyphenated
      * UUID; a physical device's is not. No udid at all means the default local simulator.
      *

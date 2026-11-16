@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 public class MusicPage extends BasePage {
 
     // MusicTopBar's centred title. Not the tab-bar label, which carries tab.music.
-    private final By musicHeaderTitle = id("music.title");
+    private final By musicHeaderTitle = idOrNavTitle("music.title", "Music");
 
     // Title Text of every MusicTrackCard on Music home (track and album cards alike - the
     // section's own tap handler decides player vs Album Details). Its label is the card's
@@ -78,6 +78,18 @@ public class MusicPage extends BasePage {
 
     public boolean isMusicScreenVisible() {
         return isAnyVisible(musicHeaderTitle);
+    }
+
+    public boolean waitForMusicVisible(Duration timeout) {
+        // musicHeaderTitle uses "music.title" which is not in the iOS source; fall back to any
+        // element with label "Music" (the top-bar title StaticText or the selected tab label).
+        By any = idOrText("music.title", "Music");
+        try {
+            return new WebDriverWait(driver, timeout).ignoring(StaleElementReferenceException.class)
+                    .until(d -> d.findElements(any).stream().anyMatch(WebElement::isDisplayed));
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /** Title of the first track card on Music home, or null if none has loaded yet. */

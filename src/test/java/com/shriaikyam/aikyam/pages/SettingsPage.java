@@ -53,7 +53,10 @@ public class SettingsPage extends BasePage {
     private final By postCardCommentSignal = id("feed.post.comment");
     private final By userListContentSignal = AppiumBy.iOSNsPredicateString(
             "name == 'following.row' OR name == 'followers.row'");
-    private final By accountSwitcherCapsule = id("settings.accountSwitcher");
+    // iOS main's capsule has no identifier; it reads "PERSONAL ACCOUNT" or "TEMPLE ACCOUNT".
+    private final By accountSwitcherCapsule = AppiumBy.iOSNsPredicateString(
+            "name == 'settings.accountSwitcher' OR (type == 'XCUIElementTypeButton'"
+                    + " AND (label BEGINSWITH 'PERSONAL ACCOUNT' OR label BEGINSWITH 'TEMPLE ACCOUNT'))");
 
     public SettingsPage(IOSDriver driver) {
         super(driver);

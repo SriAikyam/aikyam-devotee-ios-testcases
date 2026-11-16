@@ -20,7 +20,7 @@ public class EventsPage extends BasePage {
     private final By attendingFilterChip = id("events.filter.attending");
     private final By savedFilterChip = id("events.filter.saved");
     private final By nearMeFilterChip = id("events.filter.near_me");
-    private final By eventsTitle = id("events.title");
+    private final By eventsTitle = idOrNavTitle("events.title", "Events");
 
     private final By detailsAction = id("events.card.details");
     private final By emptyState = id("events.empty");
