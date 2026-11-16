@@ -44,11 +44,21 @@ public class PriestDeepLinkJourneyTest extends BaseTest {
     public void switchBackToPersonalAccount() {
         try {
             driver.activateApp(DeepLinkPage.DEV_BUNDLE_ID);
-            if (new ProfilePage(driver).openSettingsHub()) {
-                new SettingsPage(driver).switchToPersonalAccount();
+            ProfilePage profile = new ProfilePage(driver);
+            boolean hubOpen = profile.openSettingsHub();
+            if (!hubOpen) {
+                System.err.println("[PriestDeepLinkJourneyTest] WARNING: Settings hub did not open — "
+                        + "account may still be on the temple context. Next test may fail.");
+                return;
             }
-        } catch (RuntimeException ignored) {
-            // BaseTest.resetToHome restores the personal account before the next test anyway.
+            boolean switched = new SettingsPage(driver).switchToPersonalAccount();
+            if (!switched) {
+                System.err.println("[PriestDeepLinkJourneyTest] WARNING: switchToPersonalAccount returned "
+                        + "false — account may still be on the temple context.");
+            }
+        } catch (RuntimeException e) {
+            // cleanup must not mask the test verdict, but log so the failure is diagnosable
+            System.err.println("[PriestDeepLinkJourneyTest] WARNING: @After cleanup threw: " + e.getMessage());
         }
     }
 

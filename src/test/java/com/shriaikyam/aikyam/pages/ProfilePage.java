@@ -20,8 +20,8 @@ public class ProfilePage extends BasePage {
     }
 
     // AccountSettingsButton: the avatar at the trailing end of every tab's header.
-    // iOS main's AccountSettingsButton has no identifier; its label is "Settings".
-    private final By profileAvatarAction = idOrLabel("header.account", "Settings");
+    // accessibilityIdentifier "header.account" is set in FeedTopBarComponents.swift.
+    private final By profileAvatarAction = id("header.account");
     private final By personalProfileAction = id("settings.row.personalProfile");
     private final By editProfileAction = id("profile.edit");
     private final By editProfileTitle = id("profile.edit.title");

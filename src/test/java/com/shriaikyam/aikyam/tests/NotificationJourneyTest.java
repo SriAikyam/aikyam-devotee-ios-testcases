@@ -15,6 +15,10 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
+import io.appium.java_client.AppiumBy;
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
+
 import java.time.Duration;
 
 import static com.shriaikyam.aikyam.pages.DeepLinkPage.payload;
@@ -90,6 +94,28 @@ public class NotificationJourneyTest extends BaseTest {
      * them is unknown - which is how the priority cases below are built. */
     private void assertLivePlayer() {
         Assert.assertTrue("The live stream player must open", links.isLivePlayerShown(LAND));
+    }
+
+    /** assertLivePlayer + verifies the specific video id is in the web view URL.
+     * Distinguishes TC290 (ISKCON) from TC291 (Shirdi): if the fallback list iterated
+     * and returned the first entry for both ids, the URL check catches it. */
+    private void assertLivePlayerForStream(String expectedVideoId) {
+        assertLivePlayer();
+        By webView = AppiumBy.iOSClassChain("**/XCUIElementTypeWebView");
+        try {
+            WebElement wv = driver.findElements(webView).stream()
+                    .filter(org.openqa.selenium.WebElement::isDisplayed)
+                    .findFirst().orElse(null);
+            if (wv != null) {
+                String url = wv.getAttribute("URL");
+                Assert.assertTrue(
+                        "Live player URL must contain videoId=" + expectedVideoId
+                                + " — received: " + url,
+                        url != null && url.contains(expectedVideoId));
+            }
+        } catch (RuntimeException ignored) {
+            // URL attribute is best-effort on XCUITest; primary assertion (player open) is above.
+        }
     }
 
     // =========================================================================
@@ -212,11 +238,12 @@ public class NotificationJourneyTest extends BaseTest {
         assertLivePlayer();
     }
 
-    /** The second fallback entry - resolution is not just "take the first stream". */
+    /** The second fallback entry in resolveStream must open its own player, not ISKCON's.
+     * assertLivePlayerForStream checks the YouTube embed URL to prove which stream resolved. */
     @Test
     public void TC291_Notify_LiveId_Shirdi_Stream_Opens_Live_Player() {
         notifyAndTap("Shirdi Saibaba Sansthan live", "liveId", SHIRDI);
-        assertLivePlayer();
+        assertLivePlayerForStream(SHIRDI);
     }
 
     /** resolveStream finds nothing, the router falls back to .liveTab. */
