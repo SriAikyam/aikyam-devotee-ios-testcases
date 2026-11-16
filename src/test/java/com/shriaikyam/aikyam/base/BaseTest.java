@@ -634,7 +634,7 @@ public abstract class BaseTest {
 
     /** Best-effort: a diagnostics-capture failure must never mask the real test failure,
      * so every step here swallows its own exceptions independently. */
-    private void captureFailureDiagnostics(Description description, Throwable failure) {
+    protected void captureFailureDiagnostics(Description description, Throwable failure) {
         String testId = description.getClassName() + "." + description.getMethodName();
         Path dir = DIAGNOSTICS_DIR.resolve(description.getTestClass().getSimpleName());
         try {

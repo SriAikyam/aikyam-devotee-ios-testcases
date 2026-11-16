@@ -123,6 +123,17 @@ fun Test.prepareSimulatorLocation() {
     }
 }
 
+// LiveChantTest's switches (-Dlivechant.enabled, .long, .backgroundMinutes, .japaTrack, .otherTrack),
+// forwarded to every Test task (test, p0Smoke, p1Rest) so an override is never silently dropped.
+// LiveChantTest is opt-in (-Dlivechant.enabled=true): each case starts a real chant on the shared
+// dev backend. Run it on ONE shard only: shards on the same login hit "one active chant per host",
+// and one shard's cleanup would end the other's chant.
+tasks.withType<Test>().configureEach {
+    System.getProperties().stringPropertyNames()
+        .filter { it.startsWith("livechant.") }
+        .forEach { key -> systemProperty(key, System.getProperty(key)) }
+}
+
 tasks.test {
     // 256m survived a 27-test smoke run but not the full suite: a 106-test run accumulates
     // page sources and per-test driver state until the forked JVM is killed. The 13 Oct full
