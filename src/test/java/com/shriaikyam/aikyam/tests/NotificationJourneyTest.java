@@ -161,6 +161,15 @@ public class NotificationJourneyTest extends BaseTest {
         Assert.assertFalse("Not Events (the pre-fix mapping)", links.isTabSelected("tab.events"));
     }
 
+    /** Android parity (D18): search lives on Explore; before the fix iOS pushed a
+     * "Search - Coming Soon" placeholder, which assertTab's no-back-button check rules out. */
+    @Test
+    public void TC325_Notify_Screen_Search_Switches_To_Explore_Tab() {
+        notifyAndTap("Search temples", "screen", "search");
+        assertTab("tab.explore");
+        Assert.assertTrue("Explore content must show", new ExplorePage(driver).isExploreVisible());
+    }
+
     // =========================================================================
     // deeplink field (and its deep_link / deepLink spellings)
     // =========================================================================
