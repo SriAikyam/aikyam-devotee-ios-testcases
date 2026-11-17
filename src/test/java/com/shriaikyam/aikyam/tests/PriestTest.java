@@ -22,8 +22,8 @@ import com.shriaikyam.aikyam.utils.DeviceControl;
  * in between - and every other class that runs after this one - finds the session in
  * the state it expects.
  *
- * TC168 asserts Order History does not render the raw "No active temple context" error
- * instead of order data or a designed empty state.
+ * TC163 (Orders tab) and TC168 (Order History) assert they do not render the raw "No active
+ * temple context" error instead of order data or a designed empty state.
  */
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PriestTest extends BaseTest {
@@ -53,6 +53,27 @@ public class PriestTest extends BaseTest {
                 settingsPage.switchToTempleAccount());
         Assert.assertTrue("Priest bottom navigation should appear",
                 priestPage.isPriestBottomNavVisible());
+    }
+
+    /** Regression test for parity audit T4, ported from Android TC163. Temple ids on this
+     * backend carry no "temple_" prefix (e.g. T060747), which the Orders tab used to reject
+     * and show the raw "No active temple context" error instead of orders or an empty state. */
+    @Test
+    public void TC163_Verify_Orders_Screen_Does_Not_Show_Session_Error() {
+        Assume.assumeTrue(DeviceControl.SIMULATOR_ONLY_SEEDED_ACCOUNT, DeviceControl.isSimulator());
+        // Each test opens a fresh session and the app can reopen on the personal account,
+        // so switch here instead of relying on TC161's switch surviving the relaunch.
+        Assert.assertTrue("Settings hub should open", new ProfilePage(driver).openSettingsHub());
+        Assert.assertTrue("Temple account should be selectable",
+                new SettingsPage(driver).switchToTempleAccount());
+        PriestPage priestPage = new PriestPage(driver);
+        priestPage.tapOrdersTab();
+
+        Assert.assertTrue("Orders screen should be reachable", priestPage.isOrdersScreenVisible());
+        Assert.assertFalse(
+                "Orders should show order data or a designed empty state, not a raw session error",
+                priestPage.isTempleContextErrorVisible()
+        );
     }
 
     @Test
