@@ -146,11 +146,13 @@ public class NotificationJourneyTest extends BaseTest {
         Assert.assertTrue("Home feed must show", links.isHomeFeedShown(LAND));
     }
 
-    /** screen="settings" maps to tab 4 (Apps), not the Settings screen - contrast TC287. */
+    /** D17, Android parity: screen="settings" opens the Settings screen, like TC287's deeplink.
+     * It used to switch to the Apps tab. */
     @Test
-    public void TC283_Notify_Screen_Settings_Switches_To_Apps_Tab() {
+    public void TC283_Notify_Screen_Settings_Opens_Settings_Hub() {
         notifyAndTap("Settings reminder", "screen", "settings");
-        assertTab("tab.apps");
+        Assert.assertTrue("Settings hub must open", new SettingsPage(driver).isSettingsHubVisible());
+        Assert.assertFalse("Not the Apps tab (the pre-fix mapping)", links.isTabSelected("tab.apps"));
     }
 
     /** Legacy alias still sent by older campaigns; before PR #698 it opened Events. */
@@ -214,10 +216,35 @@ public class NotificationJourneyTest extends BaseTest {
 
     /** A tab-only deeplink has no app route, so it yields to the screen field (PR #698). */
     @Test
-    public void TC310_Notify_Tab_Switch_Deeplink_Yields_To_Screen_Field() {
-        notifyAndTap("Open Explore", "deeplink", "aikyam://music", "screen", "explore");
-        assertTab("tab.explore");
-        Assert.assertFalse("The tab-only deeplink must not win", links.isTabSelected("tab.music"));
+    public void TC310_Notify_Tab_Switch_Deeplink_Wins_Over_Screen_Field() {
+        notifyAndTap("Open Music", "deeplink", "aikyam://music", "screen", "explore");
+        assertTab("tab.music");
+        Assert.assertFalse("The screen field must not win", links.isTabSelected("tab.explore"));
+    }
+
+    /** Android parity: an entity deeplink beats the screen field. An unknown temple id still
+     * opens Temple details (its error state, as TC247), which proves the deeplink won. */
+    @Test
+    public void TC326_Notify_Entity_Deeplink_Wins_Over_Screen_Field() {
+        notifyAndTap("Visit the temple", "deeplink", "aikyam://temples/" + UNKNOWN, "screen", "explore");
+        Assert.assertTrue("Temple details must open", links.waitForText("Error loading temple details", LAND));
+        Assert.assertFalse("The screen field must not win", links.isTabSelected("tab.explore"));
+    }
+
+    /** Android parity: aikyam://community is the All Posts feed, which iOS hosts on Home. */
+    @Test
+    public void TC327_Notify_Deeplink_Community_Switches_To_Home_Tab() {
+        startOnEventsTab();
+        notifyAndTap("New posts", "deeplink", "aikyam://community");
+        assertTab("tab.home");
+        Assert.assertTrue("Home feed must show", links.isHomeFeedShown(LAND));
+    }
+
+    /** Android parity: a raw screen value naming an Android route opens that screen. */
+    @Test
+    public void TC328_Notify_Screen_Music_Switches_To_Music_Tab() {
+        notifyAndTap("New bhajans", "screen", "music");
+        assertTab("tab.music");
     }
 
     /** Bare aikyam://streams resolves to nothing in NotificationHandler, so RootView routes the
