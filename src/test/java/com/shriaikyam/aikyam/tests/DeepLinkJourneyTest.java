@@ -232,6 +232,27 @@ public class DeepLinkJourneyTest extends BaseTest {
         Assert.assertFalse("Nothing may be pushed", links.isBackShownNow());
     }
 
+    /** Android parity: aikyam://community and aikyam://feed are the All Posts feed, which iOS
+     * hosts on Home. Each starts on Events so landing on Home proves the link was handled. */
+    @Test
+    public void TC329_Verify_Community_And_Feed_Links_Switch_To_Home_Tab() {
+        for (String link : new String[] {"aikyam://community", "aikyam://feed"}) {
+            links.fire("aikyam://events");
+            Assert.assertTrue("Precondition: Events tab selected", links.waitForTabSelected("tab.events", LAND));
+            links.fire(link);
+            Assert.assertTrue("Home must be selected: " + link, links.waitForTabSelected("tab.home", LAND));
+            Assert.assertFalse("A tab switch pushes nothing: " + link, links.isBackShownNow());
+        }
+    }
+
+    /** Android parity: aikyam://mini_app_webview/<id> opens that mini app inside Apps. */
+    @Test
+    public void TC330_Verify_Mini_App_Webview_Link_Opens_That_Mini_App() {
+        links.fire("aikyam://mini_app_webview/panchang");
+        Assert.assertTrue("The Panchang mini-app must open", links.isMiniAppShown("Panchang", LAND));
+        Assert.assertTrue("Mini-apps open inside the Apps tab", links.isTabSelected("tab.apps"));
+    }
+
     @Test
     public void TC259_Verify_Events_Deep_Link_Switches_To_Events_Tab_Not_Push() {
         links.fire("aikyam://events");
