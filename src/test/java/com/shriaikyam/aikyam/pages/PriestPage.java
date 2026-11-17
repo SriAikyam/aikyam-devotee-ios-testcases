@@ -113,8 +113,10 @@ public class PriestPage extends BasePage {
         return isAnyVisible(id("priest.live.happening"), id("priest.live.upcoming"));
     }
 
+    /** TempleOrdersView sets no identifier yet, so its Pending Acceptance / Seva Bookings
+     * segment labels are the fallback. */
     public boolean isOrdersScreenVisible() {
-        return isAnyVisible(pendingAcceptanceTab);
+        return isAnyVisible(pendingAcceptanceTab, textContains("Pending Acceptance"), text("Seva Bookings"));
     }
 
     /** Exposed as its own check (rather than folded into a single pass/fail) so a test can
