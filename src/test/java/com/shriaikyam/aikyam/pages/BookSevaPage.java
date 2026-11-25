@@ -200,6 +200,11 @@ public class BookSevaPage extends BasePage {
         return scrollUntilVisible(8, chip) && tapFirstVisible(chip);
     }
 
+    /** Booking footer summary, e.g. "2 devotees • Seva (2 x ₹1) ₹2". */
+    public boolean isFooterTextVisible(String part) {
+        return isVisibleNow(textContains(part));
+    }
+
     public boolean isFinalTotalVisible() {
         return scrollUntilVisible(6, totalAmount);
     }

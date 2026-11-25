@@ -151,6 +151,34 @@ public class SevaBookingJourneyTest extends BaseTest {
         Assert.assertTrue(again.cancelPaymentReview());
     }
 
+    /** QA SEV-D09: two devotees. A per-person seva doubles the seva amount; a per-seva one keeps it. Needs
+     * -Daikyam.otherDevoteeName (a second family member on the account). */
+    @Test
+    public void TC916_Verify_Two_Devotees_Scale_The_Total_By_Price_Type() {
+        String other = System.getProperty("aikyam.otherDevoteeName", "");
+        org.junit.Assume.assumeFalse("Skipping: set aikyam.otherDevoteeName", other.isEmpty());
+        BookSevaPage seva = fillValidForm();
+        Assert.assertTrue(seva.waitForPaymentReviewScreen());
+        BigDecimal one = seva.readFinalTotal();
+        Assert.assertNotNull(one);
+        Assert.assertTrue(seva.cancelPaymentReview());
+
+        BookSevaPage again = openBookingForm();
+        Assert.assertTrue(again.confirmDefaultDate());
+        Assert.assertTrue(again.toggleDevotee(SevaTestConfig.requireSelfName()));
+        Assert.assertTrue(again.toggleDevotee(other));
+        Assert.assertEquals("Total number of devotees", 2, again.readTotalDevoteesCount());
+        boolean perPerson = again.isFooterTextVisible("(2 x ");
+        Assert.assertTrue("Footer should say 2 devotees", again.isFooterTextVisible("2 devotees"));
+        Assert.assertTrue(again.tapPlaceSevaOrder());
+        Assert.assertTrue(again.waitForPaymentReviewScreen());
+        BigDecimal two = again.readFinalTotal();
+        Assert.assertNotNull(two);
+        BigDecimal expected = perPerson ? one.multiply(BigDecimal.valueOf(2)) : one;
+        Assert.assertEquals((perPerson ? "Per-person" : "Per-seva") + " total for 2 devotees", 0, expected.compareTo(two));
+        Assert.assertTrue(again.cancelPaymentReview());
+    }
+
     @Test
     public void TC908_Verify_Back_From_Review_And_Pay_Returns_Without_Charging() {
         BookSevaPage seva = fillValidForm();
