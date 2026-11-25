@@ -123,6 +123,14 @@ fun Test.prepareSimulatorLocation() {
     }
 }
 
+// Seva suite inputs (-Daikyam.sevaTempleLink, selfDevoteeName, ownOrderId, payu.testMode,
+// manualNetwork, ...) and the WDA port, forwarded to every test task. See SevaTestConfig.
+tasks.withType<Test>().configureEach {
+    System.getProperties().stringPropertyNames()
+        .filter { it.startsWith("aikyam.") || it == "appium.wdaLocalPort" }
+        .forEach { key -> systemProperty(key, System.getProperty(key)) }
+}
+
 tasks.test {
     // 256m survived a 27-test smoke run but not the full suite: a 106-test run accumulates
     // page sources and per-test driver state until the forked JVM is killed. The 13 Oct full
