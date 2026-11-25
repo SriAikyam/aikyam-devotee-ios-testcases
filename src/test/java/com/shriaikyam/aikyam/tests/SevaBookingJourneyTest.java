@@ -137,9 +137,9 @@ public class SevaBookingJourneyTest extends BaseTest {
         BookSevaPage again = openBookingForm();
         Assert.assertTrue(again.confirmDefaultDate());
         Assert.assertTrue(again.toggleDevotee(SevaTestConfig.requireSelfName()));
-        // Chip values seen on dev 25 Nov 2026: Kanike 20/30/40/50, Hundi 25/50/75/100 (50 is in both).
+        // Chip values match Android (iOS PR for QA DEF-09): Kanike 5/10/20/50, Hundi 11/21/51/116.
         int kanike = Integer.getInteger("aikyam.kanikeChip", 20);
-        int hundi = Integer.getInteger("aikyam.hundiChip", 25);
+        int hundi = Integer.getInteger("aikyam.hundiChip", 21);
         Assert.assertTrue("Kanike ₹" + kanike + " chip", again.tapAmountChip(kanike));
         Assert.assertTrue("Hundi ₹" + hundi + " chip", again.tapAmountChip(hundi));
         Assert.assertTrue(again.tapPlaceSevaOrder());

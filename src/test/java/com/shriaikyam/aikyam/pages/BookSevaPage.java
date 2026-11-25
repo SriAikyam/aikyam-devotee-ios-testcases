@@ -193,9 +193,10 @@ public class BookSevaPage extends BasePage {
         return scrollBackUntilVisible(6, devoteeError) || scrollUntilVisible(6, devoteeError);
     }
 
-    /** Kanike / Hundi chip by amount, e.g. "Poojari Kanike ₹20" or "Hundi ₹21". */
+    /** Kanike / Hundi chip by amount. Buttons only: the footer's "Final Total ₹21" text can share the label. */
     public boolean tapAmountChip(int amount) {
-        By chip = AppiumBy.iOSNsPredicateString("label == " + predicateLiteral("₹" + amount));
+        By chip = AppiumBy.iOSNsPredicateString(
+                "type == 'XCUIElementTypeButton' AND label == " + predicateLiteral("₹" + amount));
         return scrollUntilVisible(8, chip) && tapFirstVisible(chip);
     }
 
