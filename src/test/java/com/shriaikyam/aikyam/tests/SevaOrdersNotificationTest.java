@@ -2,9 +2,11 @@ package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
 import com.shriaikyam.aikyam.categories.P0;
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.DeepLinkPage;
 import com.shriaikyam.aikyam.pages.SevaOrdersPage;
 import io.appium.java_client.appmanagement.ApplicationState;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
@@ -28,7 +30,7 @@ public class SevaOrdersNotificationTest extends BaseTest {
         return true;
     }
 
-    @org.junit.AfterClass
+    @AfterClass
     public static void endSharedSession() {
         releaseSharedDriver();
     }
@@ -144,7 +146,7 @@ public class SevaOrdersNotificationTest extends BaseTest {
         Assert.assertTrue(new DeepLinkPage(driver).fire("aikyam://orders/" + orderId));
         SevaOrdersPage orders = new SevaOrdersPage(driver);
         Assert.assertTrue(orders.isOrderLoaded());
-        com.shriaikyam.aikyam.pages.BasePage.navigateBack(driver);
+        BasePage.navigateBack(driver);
         Assert.assertFalse("Back should leave Order Details", orders.isOrderPageVisible());
         Assert.assertEquals(ApplicationState.RUNNING_IN_FOREGROUND, driver.queryAppState(DeepLinkPage.DEV_BUNDLE_ID));
     }

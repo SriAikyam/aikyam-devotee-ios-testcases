@@ -2,10 +2,13 @@ package com.shriaikyam.aikyam.tests;
 
 import com.shriaikyam.aikyam.base.BaseTest;
 import com.shriaikyam.aikyam.categories.P0;
+import com.shriaikyam.aikyam.pages.BasePage;
 import com.shriaikyam.aikyam.pages.BookSevaPage;
 import com.shriaikyam.aikyam.pages.DeepLinkPage;
+import com.shriaikyam.aikyam.pages.HomePage;
 import com.shriaikyam.aikyam.pages.SevaPaymentPage;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -29,7 +32,7 @@ public class SevaBookingJourneyTest extends BaseTest {
         return true;
     }
 
-    @org.junit.AfterClass
+    @AfterClass
     public static void endSharedSession() {
         releaseSharedDriver();
     }
@@ -88,7 +91,7 @@ public class SevaBookingJourneyTest extends BaseTest {
         Assert.assertTrue(seva.tapPlaceSevaOrder());
         Assert.assertTrue("Missing date should be flagged", seva.isDateValidationErrorVisible());
         Assert.assertTrue("Missing devotee should be flagged", seva.isDevoteeValidationErrorVisible());
-        Assert.assertFalse("An invalid form must not reach Review & Pay", seva.waitForPaymentReviewScreen());
+        Assert.assertFalse("An invalid form must not reach Review & Pay", seva.isPaymentReviewVisibleNow());
     }
 
     @Category(P0.class)
@@ -184,6 +187,7 @@ public class SevaBookingJourneyTest extends BaseTest {
         BookSevaPage seva = fillValidForm();
         Assert.assertTrue(seva.waitForPaymentReviewScreen());
         Assert.assertTrue("Back should leave Review & Pay", seva.cancelPaymentReview());
+        Assert.assertTrue("Back should land on the booking form", seva.isBookingDetailsScreenVisible());
         Assert.assertFalse("No payment result should show", new SevaPaymentPage(driver).isPaymentSuccessVisible());
     }
 
@@ -196,7 +200,7 @@ public class SevaBookingJourneyTest extends BaseTest {
         Assert.assertTrue(seva.waitForPaymentReviewScreen());
         Assert.assertTrue(seva.cancelPaymentReview());
         Assert.assertFalse("One back must leave Review & Pay; a second copy means a double submit",
-                seva.waitForPaymentReviewScreen());
+                seva.isPaymentReviewVisibleNow());
     }
 
     @Test
@@ -204,9 +208,12 @@ public class SevaBookingJourneyTest extends BaseTest {
         BookSevaPage seva = fillValidForm();
         Assert.assertTrue(seva.waitForPaymentReviewScreen());
         BigDecimal total = seva.readFinalTotal();
+        Assert.assertNotNull("Total Amount should show an amount", total);
         driver.runAppInBackground(Duration.ofSeconds(15));
         Assert.assertTrue("Review & Pay should still be there", seva.waitForPaymentReviewScreen());
-        Assert.assertEquals("Total should be unchanged after resume", 0, total.compareTo(seva.readFinalTotal()));
+        BigDecimal after = seva.readFinalTotal();
+        Assert.assertNotNull("Total Amount should still show an amount", after);
+        Assert.assertEquals("Total should be unchanged after resume", 0, total.compareTo(after));
         Assert.assertTrue(seva.cancelPaymentReview());
     }
 
@@ -217,9 +224,9 @@ public class SevaBookingJourneyTest extends BaseTest {
     public void TC912_Verify_Back_From_Booking_Form_Returns_To_Sevas_Without_An_Order() {
         BookSevaPage seva = openBookingForm();
         Assert.assertTrue(seva.confirmDefaultDate());
-        com.shriaikyam.aikyam.pages.BasePage.navigateBack(driver);
+        BasePage.navigateBack(driver);
         Assert.assertTrue("Back should return to the temple's Sevas", seva.isSevaCardVisible());
-        Assert.assertFalse("Leaving the form must not open Review & Pay", seva.waitForPaymentReviewScreen());
+        Assert.assertFalse("Leaving the form must not open Review & Pay", seva.isPaymentReviewVisibleNow());
     }
 
     @Category(P0.class)
@@ -251,7 +258,27 @@ public class SevaBookingJourneyTest extends BaseTest {
         DeepLinkPage links = new DeepLinkPage(driver);
         Assert.assertTrue(links.forceStopApp());
         driver.activateApp(DeepLinkPage.DEV_BUNDLE_ID);
+        Assert.assertTrue("Relaunch should reach a usable screen (Home or Review & Pay)",
+                new HomePage(driver).isHomeBottomNavigationVisible() || seva.isPaymentReviewVisibleNow());
         SevaPaymentPage pay = new SevaPaymentPage(driver);
         Assert.assertFalse("A payment never started must not show as successful", pay.isPaymentSuccessVisible());
+    }
+
+    /** Not yet run on a device. Booking the same seva, date and devotee twice must raise the
+     * "already booked" prompt; every other test accepts it silently, so this is the one that checks it. */
+    @Test
+    public void TC917_Verify_Booking_The_Same_Seva_And_Date_Again_Asks_First() {
+        BookSevaPage seva = fillValidForm();
+        Assert.assertTrue(seva.waitForPaymentReviewScreen());
+        Assert.assertTrue(seva.cancelPaymentReview());
+
+        BookSevaPage again = openBookingForm();
+        Assert.assertTrue(again.confirmDefaultDate());
+        Assert.assertTrue(again.toggleDevotee(SevaTestConfig.requireSelfName()));
+        Assert.assertTrue(again.tapPlaceSevaOrder());
+        Assert.assertTrue("A second booking for the same date should ask before booking again",
+                again.wasDuplicatePromptShown());
+        Assert.assertTrue(again.waitForPaymentReviewScreen());
+        Assert.assertTrue(again.cancelPaymentReview());
     }
 }

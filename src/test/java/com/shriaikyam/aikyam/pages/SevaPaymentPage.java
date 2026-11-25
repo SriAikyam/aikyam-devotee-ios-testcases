@@ -3,10 +3,17 @@ package com.shriaikyam.aikyam.pages;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Dimension;
+import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebElement;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Review & Pay's email field and the screens around PayU CheckoutPro on iOS. Nothing here opens
@@ -18,8 +25,6 @@ public class SevaPaymentPage extends BasePage {
     private final By emailField = AppiumBy.iOSNsPredicateString(
             "type == 'XCUIElementTypeTextField' AND (placeholderValue CONTAINS[c] 'email' OR value CONTAINS '@')");
     private final By paymentSuccess = text("Payment Successful");
-    private final By paymentCancelled = textContains("Payment cancelled");
-    private final By paymentFailed = textContains("Payment failed");
     private final By emailRequired = text("Email is required");
     // PayU CheckoutPro's option list; these labels come from the PayU SDK.
     private final By payUCards = textContains("Cards");
@@ -34,8 +39,7 @@ public class SevaPaymentPage extends BasePage {
         if (!scrollUntilVisible(8, emailField)) {
             return false;
         }
-        List<WebElement> fields = visibleElements(emailField);
-        WebElement field = fields.get(fields.size() - 1);
+        WebElement field = emailFieldElement();
         field.click();
         waitUntilKeyboardShown();
         field.clear();
@@ -48,12 +52,30 @@ public class SevaPaymentPage extends BasePage {
         if (!scrollUntilVisible(8, emailField)) {
             return false;
         }
-        WebElement field = visibleElements(emailField).get(0);
+        WebElement field = emailFieldElement();
         field.click();
         field.clear();
         hideKeyboardIfShown();
         String v = field.getAttribute("value");
         return v == null || !v.contains("@");
+    }
+
+    /** The same field for typing and clearing: the last match (Review & Pay's own field sits lowest). */
+    private WebElement emailFieldElement() {
+        List<WebElement> fields = visibleElements(emailField);
+        return fields.get(fields.size() - 1);
+    }
+
+    /** Switches the phone to light mode (XCUITest mobile: setAppearance) and confirms it. */
+    @SuppressWarnings("unchecked")
+    public boolean forceLightMode() {
+        try {
+            driver.executeScript("mobile: setAppearance", Map.of("style", "light"));
+            Object info = driver.executeScript("mobile: getAppearance");
+            return "light".equals(String.valueOf(((Map<String, Object>) info).get("style")));
+        } catch (RuntimeException unsupported) {
+            return false;
+        }
     }
 
     public boolean isEmailRequiredVisible() {
@@ -65,41 +87,51 @@ public class SevaPaymentPage extends BasePage {
      * page source still shows Review & Pay underneath and none of PayU's labels (confirmed on
      * iPhone 12, 25 Nov 2026, with snapshotMaxDepth raised too). So PayU is recognised from a
      * screenshot instead: its dark header and dark footer bar, which Review & Pay (light) lacks.
+     * Only valid in light mode; BookSevaPage.tapProceedToPaymentInPayUTestMode() forces it.
+     *
+     * Sample and tap positions are screen fractions calibrated on an iPhone 12 (iOS 27.0.1, PayU
+     * CheckoutPro as of 25 Nov 2026). Another screen shape (Dynamic Island) or PayU SDK update may
+     * move them: override with -Daikyam.payu.<name>=<fraction> (names in the pos() calls below).
      */
     public enum PayUState { NOT_SHOWN, CHECKOUT, CANCEL_SHEET }
 
     public PayUState payUState() {
         try {
-            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(
-                    new java.io.ByteArrayInputStream(driver.getScreenshotAs(org.openqa.selenium.OutputType.BYTES)));
-            boolean header = isDarkGrey(img, 0.85, 0.12);
-            boolean footer = isDarkGrey(img, 0.30, 0.975);
+            BufferedImage img = ImageIO.read(new ByteArrayInputStream(driver.getScreenshotAs(OutputType.BYTES)));
+            boolean header = isDarkGrey(img, pos("headerX", 0.85), pos("headerY", 0.12));
+            boolean footer = isDarkGrey(img, pos("footerX", 0.30), pos("footerY", 0.975));
             if (header && footer) {
                 return PayUState.CHECKOUT;
             }
-            if (header && isLight(img, 0.50, 0.93)) {
+            if (header && isLight(img, pos("sheetX", 0.50), pos("sheetY", 0.93))) {
                 return PayUState.CANCEL_SHEET;
             }
             return PayUState.NOT_SHOWN;
-        } catch (java.io.IOException | RuntimeException e) {
+        } catch (IOException | RuntimeException e) {
             return PayUState.NOT_SHOWN;
         }
     }
 
-    private static int[] rgb(java.awt.image.BufferedImage img, double fx, double fy) {
+    /** A calibrated screen fraction, overridable with -Daikyam.payu.<name>. */
+    private static double pos(String name, double iPhone12Default) {
+        String v = System.getProperty("aikyam.payu." + name);
+        return v == null ? iPhone12Default : Double.parseDouble(v);
+    }
+
+    private static int[] rgb(BufferedImage img, double fx, double fy) {
         int c = img.getRGB((int) (img.getWidth() * fx), Math.min(img.getHeight() - 1, (int) (img.getHeight() * fy)));
         return new int[] {(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff};
     }
 
     /** PayU's bar is a flat dark grey (~#26282C); a photo or tinted header is rarely that flat. */
-    private static boolean isDarkGrey(java.awt.image.BufferedImage img, double fx, double fy) {
+    private static boolean isDarkGrey(BufferedImage img, double fx, double fy) {
         int[] p = rgb(img, fx, fy);
         int max = Math.max(p[0], Math.max(p[1], p[2]));
         int min = Math.min(p[0], Math.min(p[1], p[2]));
         return max < 70 && max - min < 20;
     }
 
-    private static boolean isLight(java.awt.image.BufferedImage img, double fx, double fy) {
+    private static boolean isLight(BufferedImage img, double fx, double fy) {
         int[] p = rgb(img, fx, fy);
         return p[0] > 200 && p[1] > 200 && p[2] > 200;
     }
@@ -121,16 +153,16 @@ public class SevaPaymentPage extends BasePage {
     /** Leaves PayU with its own back arrow (top left), confirming "Cancel Payment" with YES. Taps go
      * by position because PayU's controls aren't in the accessibility tree. True once PayU is gone. */
     public boolean cancelPayU() {
-        org.openqa.selenium.Dimension size = driver.manage().window().getSize();
+        Dimension size = driver.manage().window().getSize();
         for (int i = 0; i < 6; i++) {
             PayUState state = payUState();
             if (state == PayUState.NOT_SHOWN) {
                 return true;
             }
             if (state == PayUState.CANCEL_SHEET) {
-                tapPoint((int) (size.getWidth() * 0.27), (int) (size.getHeight() * 0.935)); // YES
+                tapPoint((int) (size.getWidth() * pos("yesX", 0.27)), (int) (size.getHeight() * pos("yesY", 0.935)));
             } else {
-                tapPoint((int) (size.getWidth() * 0.04), (int) (size.getHeight() * 0.097)); // PayU back
+                tapPoint((int) (size.getWidth() * pos("backX", 0.04)), (int) (size.getHeight() * pos("backY", 0.097)));
             }
             settle(2000);
         }
@@ -149,10 +181,6 @@ public class SevaPaymentPage extends BasePage {
         return isVisibleNow(payUCards, payUUpi, payUNetBanking);
     }
 
-    public boolean isTextVisibleAnywhere(String value) {
-        return isAnyVisible(textContains(value));
-    }
-
     public boolean isNetBankingOptionVisible() {
         return isAnyVisible(payUNetBanking);
     }
@@ -160,10 +188,6 @@ public class SevaPaymentPage extends BasePage {
 
     public boolean isPaymentSuccessVisible() {
         return isAnyVisible(paymentSuccess);
-    }
-
-    public boolean isPaymentCancelledOrFailedVisible() {
-        return isAnyVisible(paymentCancelled, paymentFailed);
     }
 
     /** Raw technical errors that must never reach a devotee. */

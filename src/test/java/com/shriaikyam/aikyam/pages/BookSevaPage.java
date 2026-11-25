@@ -4,10 +4,13 @@ import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Rectangle;
+import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Pause;
 import org.openqa.selenium.interactions.PointerInput;
 import org.openqa.selenium.interactions.Sequence;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -28,6 +31,15 @@ import java.util.Map;
  * which refuses unless the dev build is in front and the run opted into PayU test mode.
  */
 public class BookSevaPage extends BasePage {
+
+    /** The only app PayU may be opened in. Hard-coded on purpose: DeepLinkPage.DEV_BUNDLE_ID follows
+     * -Dappium.bundleId, so a run pointed at the prod bundle would pass a guard built on it. */
+    private static final String PAYU_TEST_BUNDLE_ID = "com.shriaikyam.ikyam.dev";
+
+    /** Set when a test actually opened PayU; cleanup only taps PayU's blind positions then. */
+    private static boolean payUOpened;
+
+    private boolean duplicatePromptShown;
 
     private final By sevasTab = AppiumBy.iOSNsPredicateString(
             "type == 'XCUIElementTypeButton' AND label == 'Sevas'");
@@ -71,11 +83,7 @@ public class BookSevaPage extends BasePage {
     /** A temple short link (aikyam://p/<code>) resolves over the network first, so wait for the
      * temple page itself before scrolling: swiping early scrolls whatever screen is still showing. */
     public boolean openSevasTab() {
-        long end = System.currentTimeMillis() + 30_000;
-        while (System.currentTimeMillis() < end && !isVisibleNow(sevasTab)) {
-            // Polling; isVisibleNow waits up to 2 s per call.
-        }
-        return (isVisibleNow(sevasTab) || scrollUntilVisible(sevasTab)) && tapFirstVisible(sevasTab);
+        return (waitFor(Duration.ofSeconds(30), sevasTab) || scrollUntilVisible(sevasTab)) && tapFirstVisible(sevasTab);
     }
 
     /** A bookable seva card: its Book button (scrolls the Sevas tab to find it). */
@@ -193,7 +201,8 @@ public class BookSevaPage extends BasePage {
         return scrollBackUntilVisible(6, devoteeError) || scrollUntilVisible(6, devoteeError);
     }
 
-    /** Kanike / Hundi chip by amount. Buttons only: the footer's "Final Total ₹21" text can share the label. */
+    /** Kanike / Hundi chip by its exact label, e.g. "₹20". Buttons only: the footer's "Final Total ₹21"
+     * text can share the label. */
     public boolean tapAmountChip(int amount) {
         By chip = AppiumBy.iOSNsPredicateString(
                 "type == 'XCUIElementTypeButton' AND label == " + predicateLiteral("₹" + amount));
@@ -209,15 +218,27 @@ public class BookSevaPage extends BasePage {
         return scrollUntilVisible(6, totalAmount);
     }
 
+    /** Taps Place Seva Order. If the account already holds this seva on this date the app asks
+     * first; that prompt is accepted so the run can go on, and recorded: see wasDuplicatePromptShown()
+     * (TC917 asserts it). ponytail: repeated runs stack Held bookings on one date until their TTL. */
     public boolean tapPlaceSevaOrder() {
         if (!tapFirstVisible(placeSevaOrder)) {
             return false;
         }
-        // The account already holds this seva on this date: the app asks before booking again.
-        if (isVisibleNow(duplicateBookAgain)) {
+        acceptDuplicatePromptIfShown();
+        return true;
+    }
+
+    private void acceptDuplicatePromptIfShown() {
+        duplicatePromptShown = isVisibleNow(duplicateBookAgain);
+        if (duplicatePromptShown) {
             tapFirstVisible(duplicateBookAgain);
         }
-        return true;
+    }
+
+    /** Whether the last Place Seva Order tap raised the "already booked" prompt. */
+    public boolean wasDuplicatePromptShown() {
+        return duplicatePromptShown;
     }
 
     /** Two taps 50 ms apart in one W3C action: both land before the first submit disables the form. */
@@ -241,9 +262,7 @@ public class BookSevaPage extends BasePage {
             }
         }
         driver.perform(Collections.singletonList(taps));
-        if (isVisibleNow(duplicateBookAgain)) {
-            tapFirstVisible(duplicateBookAgain);
-        }
+        acceptDuplicatePromptIfShown();
         return true;
     }
 
@@ -284,14 +303,29 @@ public class BookSevaPage extends BasePage {
                 || waitFor(Duration.ofSeconds(20), reviewTitle, amountBreakdown, proceedToPayment);
     }
 
+    /** For "must NOT be on Review & Pay" checks: looks once (~2 s) instead of waiting ~28 s. */
+    public boolean isPaymentReviewVisibleNow() {
+        return isVisibleNow(reviewTitle, amountBreakdown, proceedToPayment);
+    }
+
+    /** WebDriverWait rather than a hand loop: a dead session throws at once instead of spinning out the timeout. */
     private boolean waitFor(Duration timeout, By... locators) {
-        long end = System.currentTimeMillis() + timeout.toMillis();
-        while (System.currentTimeMillis() < end) {
-            if (isVisibleNow(locators)) {
-                return true;
-            }
+        try {
+            return new WebDriverWait(driver, timeout)
+                    .ignoring(StaleElementReferenceException.class)
+                    .until(d -> {
+                        for (By locator : locators) {
+                            for (WebElement e : d.findElements(locator)) {
+                                if (e.isDisplayed()) {
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    });
+        } catch (TimeoutException notShown) {
+            return false;
         }
-        return false;
     }
 
     public boolean isAmountBreakdownVisible() {
@@ -344,11 +378,20 @@ public class BookSevaPage extends BasePage {
             throw new IllegalStateException("Refusing to open PayU: run with -Daikyam.payu.testMode=true on the dev build");
         }
         String front = foregroundBundleId();
-        if (!DeepLinkPage.DEV_BUNDLE_ID.equals(front)) {
+        if (!PAYU_TEST_BUNDLE_ID.equals(front)) {
             throw new IllegalStateException("Refusing to open PayU: foreground app is " + front
-                    + ", not the dev build " + DeepLinkPage.DEV_BUNDLE_ID);
+                    + ", not the dev build " + PAYU_TEST_BUNDLE_ID);
         }
-        return scrollUntilVisible(8, proceedToPayment) && tapFirstVisible(proceedToPayment);
+        // PayU is recognised from a screenshot (SevaPaymentPage.payUState); in dark mode Review & Pay
+        // looks like PayU, so the run must be in light mode before PayU can open.
+        if (!new SevaPaymentPage(driver).forceLightMode()) {
+            throw new IllegalStateException("Refusing to open PayU: could not switch the phone to light mode");
+        }
+        if (!(scrollUntilVisible(8, proceedToPayment) && tapFirstVisible(proceedToPayment))) {
+            return false;
+        }
+        payUOpened = true;
+        return true;
     }
 
     @SuppressWarnings("unchecked")
@@ -365,18 +408,14 @@ public class BookSevaPage extends BasePage {
         return Boolean.getBoolean("aikyam.payu.testMode");
     }
 
-    public boolean isNoInternetMessageVisible() {
-        return isAnyVisible(textContains("No internet connection"), textContains("Network error"),
-                textContains("Check your network connection"), textContains("check your connection"));
-    }
-
     /** Test cleanup: leaves PayU / Review & Pay if a test stopped inside them. Never throws. */
     public void leavePaymentFlowIfOpen() {
         try {
             SevaPaymentPage pay = new SevaPaymentPage(driver);
-            if (pay.isPayUOnScreen()) {
+            if (payUOpened && pay.isPayUOnScreen()) {
                 pay.cancelPayU();
             }
+            payUOpened = false;
             for (int i = 0; i < 3 && isVisibleNow(reviewTitle, proceedToPayment, textContains("Net Banking")); i++) {
                 navigateBack();
                 if (isVisibleNow(text("Yes"), textContains("YES"))) {

@@ -17,7 +17,8 @@ public class SevaOrdersPage extends BasePage {
     private final By sevaOrdersSegment = text("Seva Orders");
     private final By orderDetailsTitle = text("Order Details");
     private final By notAvailable = text("Order details not available");
-    private final By couldNotLoad = textContains("Couldn't load order details");
+    // No apostrophe: the app may use a curly one.
+    private final By couldNotLoad = textContains("load order details");
     private final By anyOrderNumber = AppiumBy.iOSNsPredicateString("label BEGINSWITH 'ORD'");
     private final By paymentPaid = AppiumBy.iOSNsPredicateString(
             "label ==[c] 'CAPTURED' OR label ==[c] 'Paid' OR label ==[c] 'SUCCESS'");
@@ -47,33 +48,42 @@ public class SevaOrdersPage extends BasePage {
     }
 
     public boolean tapOrder(String bookingNo) {
-        By card = textContains("ORD" + bookingNo);
-        return scrollUntilVisible(10, card) && tapFirstVisible(card);
+        WebElement card = findOrderNumber(bookingNo, true);
+        if (card == null) {
+            return false;
+        }
+        card.click();
+        return true;
     }
 
     public boolean tapFirstOrder() {
         return tapFirstVisible(anyOrderNumber);
     }
 
-    /** True if a card shows exactly this booking number ("1001" must not match "ORD10010"). */
+    /** True if a card shows exactly ORD + this booking number ("1001" must not match "ORD10010"). */
     public boolean isBookingNumberListed(String bookingNo) {
-        scrollUntilVisible(10, textContains(bookingNo));
-        Pattern exact = Pattern.compile("(^|\\D)" + Pattern.quote(bookingNo) + "(\\D|$)");
-        for (WebElement e : visibleElements(textContains(bookingNo))) {
+        return findOrderNumber(bookingNo, true) != null;
+    }
+
+    /** The element labelled with exactly ORD<bookingNo>: "ORD" stops amounts and dates matching, and
+     * the trailing non-digit stops ORD1001 matching ORD10010. Optionally scrolls to find it. */
+    private WebElement findOrderNumber(String bookingNo, boolean scroll) {
+        By candidates = textContains("ORD" + bookingNo);
+        if (scroll) {
+            scrollUntilVisible(10, candidates);
+        }
+        Pattern exact = Pattern.compile("ORD" + Pattern.quote(bookingNo) + "(\\D|$)");
+        for (WebElement e : visibleElements(candidates)) {
             String v = e.getAttribute("label");
             if (v != null && exact.matcher(v).find()) {
-                return true;
+                return e;
             }
         }
-        return false;
+        return null;
     }
 
     public boolean isOrderPageVisible() {
         return isAnyVisible(orderDetailsTitle);
-    }
-
-    public boolean isOrderUnavailableVisible() {
-        return isAnyVisible(notAvailable, couldNotLoad);
     }
 
     public boolean isNotAvailableMessageVisible() {
@@ -91,7 +101,7 @@ public class SevaOrdersPage extends BasePage {
     }
 
     public boolean isOrderNumberVisible(String bookingNo) {
-        return isAnyVisible(textContains("ORD" + bookingNo));
+        return isAnyVisible(textContains("ORD" + bookingNo)) && findOrderNumber(bookingNo, false) != null;
     }
 
     public boolean isAnyOrderStatusVisible() {
@@ -105,10 +115,6 @@ public class SevaOrdersPage extends BasePage {
 
     public boolean isPaymentPaidVisible() {
         return scrollUntilVisible(6, paymentPaid);
-    }
-
-    public boolean isTextVisible(String value) {
-        return scrollUntilVisible(6, textContains(value));
     }
 
     /** Settings hub -> Upcoming Sevas. */

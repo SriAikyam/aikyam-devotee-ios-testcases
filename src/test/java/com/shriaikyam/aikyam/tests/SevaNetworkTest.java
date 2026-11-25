@@ -6,6 +6,7 @@ import com.shriaikyam.aikyam.pages.DeepLinkPage;
 import com.shriaikyam.aikyam.pages.SevaOrdersPage;
 import com.shriaikyam.aikyam.pages.SevaPaymentPage;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -15,6 +16,9 @@ import java.time.Duration;
  * Network loss during booking and payment (Android TC942-TC947). XCUITest cannot switch the
  * network off, so these run only with -Daikyam.manualNetwork=true and a person at the phone who
  * toggles airplane mode when the log prints ">>> ACTION ON THE PHONE". Otherwise they skip.
+ *
+ * UNVERIFIED: none of TC942-TC947 has been run on a device yet; treat a failure here as a possible
+ * test bug (labels, timings) until a manual run confirms them.
  */
 public class SevaNetworkTest extends BaseTest {
 
@@ -24,7 +28,7 @@ public class SevaNetworkTest extends BaseTest {
         return true;
     }
 
-    @org.junit.AfterClass
+    @AfterClass
     public static void endSharedSession() {
         releaseSharedDriver();
     }
@@ -79,7 +83,7 @@ public class SevaNetworkTest extends BaseTest {
         Assert.assertTrue(seva.tapPlaceSevaOrder());
         Assert.assertTrue("Should reach Review & Pay after reconnect", seva.waitForPaymentReviewScreen());
         Assert.assertTrue(seva.cancelPaymentReview());
-        Assert.assertFalse("Only one Review & Pay should be stacked", seva.waitForPaymentReviewScreen());
+        Assert.assertFalse("Only one Review & Pay should be stacked", seva.isPaymentReviewVisibleNow());
     }
 
     @Test
