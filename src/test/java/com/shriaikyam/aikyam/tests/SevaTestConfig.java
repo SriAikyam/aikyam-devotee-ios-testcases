@@ -14,6 +14,8 @@ import org.junit.Assume;
  *   aikyam.ownBookingNo     the same order's number as shown in Order History, without "ORD".
  *   aikyam.ownOrderCompleted true when that order is Completed (TC965, TC970).
  *   aikyam.payu.testMode    true to let tests open PayU. Dev build only (PayU test environment).
+ *   aikyam.kanikeChip       Poojari Kanike preset amount to tap (default 20, Android preset).
+ *   aikyam.hundiChip        Hundi preset amount to tap (default 21, Android preset).
  *   aikyam.manualNetwork    true when someone is at the phone to toggle airplane mode on cue.
  *   aikyam.seva.strict      true to FAIL (not skip) when an input above is missing. Set it on a P0
  *                           gate run: P0 cases skip without their inputs, and an all-skipped run is green.

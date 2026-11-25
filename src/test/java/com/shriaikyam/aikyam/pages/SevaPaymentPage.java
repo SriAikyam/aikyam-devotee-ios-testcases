@@ -26,6 +26,7 @@ public class SevaPaymentPage extends BasePage {
             "type == 'XCUIElementTypeTextField' AND (placeholderValue CONTAINS[c] 'email' OR value CONTAINS '@')");
     private final By paymentSuccess = text("Payment Successful");
     private final By emailRequired = text("Email is required");
+    private final By invalidEmail = text("Please enter a valid email address");
     // PayU CheckoutPro's option list; these labels come from the PayU SDK.
     private final By payUCards = textContains("Cards");
     private final By payUUpi = text("UPI");
@@ -80,6 +81,10 @@ public class SevaPaymentPage extends BasePage {
 
     public boolean isEmailRequiredVisible() {
         return isAnyVisible(emailRequired);
+    }
+
+    public boolean isInvalidEmailVisible() {
+        return isAnyVisible(invalidEmail);
     }
 
     /**

@@ -58,18 +58,15 @@ public class SevaPaymentTest extends BaseTest {
 
     @Test
     public void TC921_Verify_Missing_Email_Blocks_Payment() {
+        // The app checks the email on tap (PaymentViewModel), not by disabling the button, so this
+        // needs a tap and therefore PayU test mode.
+        SevaTestConfig.requirePayUTestMode();
         BookSevaPage seva = reachPaymentReview();
         SevaPaymentPage pay = new SevaPaymentPage(driver);
         Assert.assertTrue("Email field should be clearable", pay.clearEmail());
-        boolean enabled = seva.isProceedToPaymentEnabled();
-        if (enabled && BookSevaPage.isPayUTestModeEnabled()) {
-            seva.tapProceedToPaymentInPayUTestMode();
-            Assert.assertFalse("PayU must not open without an email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
-            Assert.assertTrue("Email is required should show", pay.isEmailRequiredVisible());
-        } else {
-            Assume.assumeFalse("Skipping: Proceed to Payment is enabled without an email; tapping it needs "
-                    + "-Daikyam.payu.testMode=true to check that PayU stays closed", enabled);
-        }
+        seva.tapProceedToPaymentInPayUTestMode();
+        Assert.assertFalse("PayU must not open without an email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
+        Assert.assertTrue("Email is required should show", pay.isEmailRequiredVisible());
         Assert.assertTrue(seva.cancelPaymentReview());
     }
 
@@ -122,18 +119,14 @@ public class SevaPaymentTest extends BaseTest {
 
     @Test
     public void TC929_Verify_Invalid_Email_Is_Not_Accepted() {
+        SevaTestConfig.requirePayUTestMode();
         BookSevaPage seva = reachPaymentReview();
         SevaPaymentPage pay = new SevaPaymentPage(driver);
         pay.clearEmail();
         Assert.assertTrue(pay.enterEmail("not-an-email"));
-        boolean enabled = seva.isProceedToPaymentEnabled();
-        if (enabled && BookSevaPage.isPayUTestModeEnabled()) {
-            seva.tapProceedToPaymentInPayUTestMode();
-            Assert.assertFalse("PayU must not open with an invalid email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
-        } else {
-            Assume.assumeFalse("Skipping: Proceed to Payment is enabled with an invalid email; tapping it needs "
-                    + "-Daikyam.payu.testMode=true to check that PayU stays closed", enabled);
-        }
+        seva.tapProceedToPaymentInPayUTestMode();
+        Assert.assertFalse("PayU must not open with an invalid email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
+        Assert.assertTrue("Invalid email message should show", pay.isInvalidEmailVisible());
         Assert.assertFalse(pay.isRawTechnicalErrorVisible());
         Assert.assertTrue(seva.cancelPaymentReview());
     }

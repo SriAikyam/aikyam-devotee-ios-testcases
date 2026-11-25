@@ -124,10 +124,10 @@ fun Test.prepareSimulatorLocation() {
 }
 
 // Seva suite inputs (-Daikyam.sevaTempleLink, selfDevoteeName, ownOrderId, payu.testMode,
-// manualNetwork, ...) and the WDA port, forwarded to every test task. See SevaTestConfig.
+// manualNetwork, ...), forwarded to every test task. See SevaTestConfig.
 tasks.withType<Test>().configureEach {
     System.getProperties().stringPropertyNames()
-        .filter { it.startsWith("aikyam.") || it == "appium.wdaLocalPort" }
+        .filter { it.startsWith("aikyam.") }
         .forEach { key -> systemProperty(key, System.getProperty(key)) }
 }
 
@@ -152,6 +152,7 @@ tasks.test {
         "appium.udid",
         "appium.xcodeOrgId",
         "appium.wdaBundleId",
+        "appium.wdaLocalPort",
         "appium.bstackApp",
         "appium.osVersion",
         "appium.bstackProject",
