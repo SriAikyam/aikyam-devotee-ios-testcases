@@ -49,8 +49,9 @@ public class BookSevaPage extends BasePage {
             "type == 'XCUIElementTypeButton' AND label == 'Details'");
     private final By bookThisSeva = textContains("Book this seva");
 
-    // "Book a Seva" form.
-    private final By formTitle = text("Book a Seva");
+    // Booking form. Title is "Sevas" like Android (older builds: "Book a Seva").
+    private final By formTitle = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeStaticText' AND label IN {'Sevas', 'Book a Seva'}");
     private final By dateOfSevaLabel = text("Date of Seva");
     private final By dateField = textContains("dd/mm/yyyy");
     private final By datePickerOk = AppiumBy.iOSNsPredicateString(
