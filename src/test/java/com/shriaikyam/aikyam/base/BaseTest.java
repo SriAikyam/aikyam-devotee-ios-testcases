@@ -5,6 +5,7 @@ import com.shriaikyam.aikyam.pages.FeedPage;
 import com.shriaikyam.aikyam.pages.LoginPage;
 import com.shriaikyam.aikyam.pages.OnboardingPage;
 import com.shriaikyam.aikyam.pages.ProfilePage;
+import com.shriaikyam.aikyam.pages.SevaPaymentPage;
 import com.shriaikyam.aikyam.pages.SettingsPage;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.appmanagement.ApplicationState;
@@ -289,6 +290,7 @@ public abstract class BaseTest {
      * what keeps the session scoped to that class instead of leaking into the next. */
     protected static void releaseSharedDriver() {
         if (sharedDriver != null) {
+            SevaPaymentPage.restoreAppearance(sharedDriver);
             quitQuietly(sharedDriver);
             sharedDriver = null;
         }

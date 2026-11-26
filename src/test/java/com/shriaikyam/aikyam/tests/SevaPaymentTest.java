@@ -65,8 +65,10 @@ public class SevaPaymentTest extends BaseTest {
         SevaPaymentPage pay = new SevaPaymentPage(driver);
         Assert.assertTrue("Email field should be clearable", pay.clearEmail());
         seva.tapProceedToPaymentInPayUTestMode();
-        Assert.assertFalse("PayU must not open without an email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
+        // The validation message is the real proof the tap was rejected before PayU: PayU only opens
+        // after it passes. The pixel check below is a second signal and can't fail open on its own.
         Assert.assertTrue("Email is required should show", pay.isEmailRequiredVisible());
+        Assert.assertFalse("PayU must not open without an email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
         Assert.assertTrue(seva.cancelPaymentReview());
     }
 
@@ -125,8 +127,9 @@ public class SevaPaymentTest extends BaseTest {
         pay.clearEmail();
         Assert.assertTrue(pay.enterEmail("not-an-email"));
         seva.tapProceedToPaymentInPayUTestMode();
-        Assert.assertFalse("PayU must not open with an invalid email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
+        // As in TC921, the validation message proves the tap was rejected before PayU.
         Assert.assertTrue("Invalid email message should show", pay.isInvalidEmailVisible());
+        Assert.assertFalse("PayU must not open with an invalid email", pay.waitForPayUCheckout(Duration.ofSeconds(8)));
         Assert.assertFalse(pay.isRawTechnicalErrorVisible());
         Assert.assertTrue(seva.cancelPaymentReview());
     }

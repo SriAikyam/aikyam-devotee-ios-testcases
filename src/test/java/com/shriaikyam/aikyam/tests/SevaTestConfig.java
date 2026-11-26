@@ -67,8 +67,9 @@ final class SevaTestConfig {
         Assume.assumeTrue("Skipping: " + howToSet, false);
     }
 
+    /** Like any other input: skips, or fails under -Daikyam.seva.strict=true so a gate run can't go green on skips. */
     static void requirePayUTestMode() {
-        Assume.assumeTrue("Skipping: run with -Daikyam.payu.testMode=true (dev build only) to open PayU",
+        requireInput("run with -Daikyam.payu.testMode=true (dev build only) to open PayU",
                 Boolean.getBoolean("aikyam.payu.testMode"));
     }
 

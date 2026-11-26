@@ -67,16 +67,39 @@ public class SevaPaymentPage extends BasePage {
         return fields.get(fields.size() - 1);
     }
 
+    /** The phone's appearance before the first forceLightMode(), so restoreAppearance() can put it back. */
+    private static String appearanceBeforeRun;
+
     /** Switches the phone to light mode (XCUITest mobile: setAppearance) and confirms it. */
-    @SuppressWarnings("unchecked")
     public boolean forceLightMode() {
         try {
+            if (appearanceBeforeRun == null) {
+                appearanceBeforeRun = appearance(driver);
+            }
             driver.executeScript("mobile: setAppearance", Map.of("style", "light"));
-            Object info = driver.executeScript("mobile: getAppearance");
-            return "light".equals(String.valueOf(((Map<String, Object>) info).get("style")));
+            return "light".equals(appearance(driver));
         } catch (RuntimeException unsupported) {
             return false;
         }
+    }
+
+    /** Puts back the appearance forceLightMode() replaced, if any. Called when the shared session ends. */
+    public static void restoreAppearance(IOSDriver driver) {
+        if (appearanceBeforeRun == null) {
+            return;
+        }
+        try {
+            driver.executeScript("mobile: setAppearance", Map.of("style", appearanceBeforeRun));
+            appearanceBeforeRun = null;
+        } catch (RuntimeException ignored) {
+            // Best effort: the session may already be gone.
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String appearance(IOSDriver driver) {
+        Object info = driver.executeScript("mobile: getAppearance");
+        return String.valueOf(((Map<String, Object>) info).get("style"));
     }
 
     public boolean isEmailRequiredVisible() {
@@ -151,6 +174,7 @@ public class SevaPaymentPage extends BasePage {
             if (isVisibleNow(payUCards, payUUpi, payUNetBanking) || payUState() == PayUState.CHECKOUT) {
                 return true;
             }
+            settle(500);
         }
         return false;
     }
