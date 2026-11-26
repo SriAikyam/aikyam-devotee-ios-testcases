@@ -26,6 +26,15 @@ public class DeepLinkPage extends BasePage {
      * equivalent aikyam:// URL, which ShareLinkRouter routes identically. */
     public boolean fire(String url) {
         String link = url.replaceFirst("^https?://[^/]+/", "aikyam://");
+        if (!com.shriaikyam.aikyam.utils.DeviceControl.isSimulator()) {
+            // A physical iPhone has no simctl; XCUITest opens the URL on the device itself.
+            try {
+                driver.executeScript("mobile: deepLink", java.util.Map.of("url", link, "bundleId", DEV_BUNDLE_ID));
+                return true;
+            } catch (RuntimeException e) {
+                return false;
+            }
+        }
         String udid = System.getProperty("appium.udid", "booted");
         try {
             Process p = new ProcessBuilder("xcrun", "simctl", "openurl", udid, link)

@@ -3,325 +3,431 @@ package com.shriaikyam.aikyam.pages;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.ios.IOSDriver;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Rectangle;
+import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Pause;
+import org.openqa.selenium.interactions.PointerInput;
+import org.openqa.selenium.interactions.Sequence;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Covers the Seva booking wizard: Seva List (SevasView) -> Catalog Details
- * (SevaCatalogDetailsView) -> Booking Details (SevaBookingView) -> Payment Review
- * (BookSevaView's HundiReviewPayView). Deliberately stops there: this page object has NO
- * method that taps "Proceed to Payment" - that button is only ever checked for
- * visibility/enabled state, never invoked, to make it structurally impossible for a test
- * to trigger a real charge.
+ * Seva booking on iOS, from a temple page to Payment Review:
+ * temple page "Sevas" tab (TempleSevasTab) -> seva card Book / Details -> Seva Details
+ * ("Book this seva") -> "Book a Seva" form (SevaBookingView) -> "Review & Pay"
+ * (PaymentFlowView / PaymentReviewContentView).
  *
- * iOS state today (see BookSevaTest's @Ignore): there is no Sevas tab, SevasView's
- * Book/Hundi/Reorder quick actions and the catalog's "Book this seva" bar are hidden behind
- * file-level flags, and "Place Seva Order (Coming soon)" only shows an alert. The locators
- * below still target the real views so the flow works once those gates lift.
+ * Locators are the English labels in the SwiftUI views; these screens set almost no
+ * accessibilityIdentifiers. Run the suite with the app in English.
+ *
+ * "Proceed to Payment" is only ever tapped through tapProceedToPaymentInPayUTestMode(),
+ * which refuses unless the dev build is in front and the run opted into PayU test mode.
  */
 public class BookSevaPage extends BasePage {
 
-    // iOS has no Sevas tab (Book Seva is on hold); same id HomePage keeps for it.
-    private final By sevasTabAction = idOrLabel("tab.sevas", "Sevas");
-    private final By sevaCardBookAction = id("sevas.card.book");
-    private final By sevaCardDetailsAction = id("sevas.card.details");
-    private final By bookThisSevaAction = id("sevas.catalog.book");
+    /** The only app PayU may be opened in. Hard-coded on purpose: DeepLinkPage.DEV_BUNDLE_ID follows
+     * -Dappium.bundleId, so a run pointed at the prod bundle would pass a guard built on it. */
+    private static final String PAYU_TEST_BUNDLE_ID = "com.shriaikyam.ikyam.dev";
 
-    // SevaBookingView section titles (BookSevaSectionTitle: icon + plain Text).
-    private final By templeSectionLabel = text("Temple");
-    private final By selectedSevaLabel = text("Selected Seva");
+    /** Set when a test actually opened PayU; cleanup only taps PayU's blind positions then. */
+    private static boolean payUOpened;
+
+    private boolean duplicatePromptShown;
+
+    private final By sevasTab = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'Sevas'");
+    private final By sevaCardBook = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'Book'");
+    private final By sevaCardDetails = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'Details'");
+    private final By bookThisSeva = textContains("Book this seva");
+
+    // Booking form. Title is "Sevas" like Android (older builds: "Book a Seva").
+    private final By formTitle = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeStaticText' AND label IN {'Sevas', 'Book a Seva'}");
     private final By dateOfSevaLabel = text("Date of Seva");
-    private final By selectDateAction = id("sevas.booking.datefield");
-    private final By datePickerOk = id("sevas.datepicker.ok");
+    private final By dateField = textContains("dd/mm/yyyy");
+    private final By datePickerOk = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'OK'");
     private final By devoteeDetailsLabel = text("Devotee Details");
-    private final By selectFamilyMembersLabel = text("Select Family Members");
-    private final By addFamilyMemberRow = id("sevas.booking.addmember");
-    private final By totalDevoteesLabel = id("sevas.booking.totaldevotees");
-    private final By devoteeCheckbox = id("sevas.booking.devotee.checkbox");
-    private final By devoteeName = id("sevas.booking.devotee.name");
-    private final By devoteeValidationError = id("sevas.booking.devoteeerror");
-    private final By dateValidationError = id("sevas.booking.dateerror");
-    private final By placeSevaOrderAction = id("sevas.booking.placeorder");
-    private final By finalTotalLabel = id("sevas.booking.finaltotal");
+    // "Total number of devotees: N" under the list. Not the bottom bar's "N devotees • Seva ₹X",
+    // which never shows fewer than 1.
+    private final By totalDevotees = textContains("Total number of devotees");
+    private final By devoteeCheckbox = AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeSwitch'");
+    private final By dateError = text("Please select date of seva");
+    private final By devoteeError = text("Please select at least one devotee");
+    private final By placeSevaOrder = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'Place Seva Order'");
+    private final By duplicateBookAgain = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'Book again'");
 
-    // "Proceed to Payment" is checked for presence/enabled state only - see class
-    // comment. Never tap this from a test.
-    private final By proceedToPaymentAction = id("hundi.review.proceed");
-    private final By amountBreakdownLabel = id("hundi.review.breakdown");
-    private final By paymentReviewBack = id("hundi.review.back");
-
-    // Hundi Donation screen (BookSevaView) - reached from a temple row's "Hundi" button on
-    // the Sevas list. Fields in order: 0=amount (HundiDonationAmountField), then the
-    // HundiLabeledField TextFields 1=name of person, 2=occasion, 3=PAN number, 4=name on
-    // PAN card.
-    private final By hundiEntryAction = id("sevas.hundi");
-    private final By hundiScreenTitle = id("hundi.title");
-    private final By hundiAmountField = id("hundi.amount");
-    private final By hundiBack = id("hundi.back");
-    private final By hundiDonateAction = id("hundi.donate");
-    private final By hundiInvalidAmountError = textContains("Please enter a valid amount");
-    private final By hundiAmountRequiredError = textContains("Please enter donation amount");
-    private final By hundiTextField = AppiumBy.className("XCUIElementTypeTextField");
-
-    // Frequent/reorder flow - only rendered when the account has past frequent sevas;
-    // callers must treat absence as a skip, not a failure.
-    private final By frequentSevasSectionHeader = id("sevas.frequent.header");
-    private final By frequentDetailsAction = id("sevas.frequent.details");
-    private final By frequentReorderAction = id("sevas.frequent.reorder");
-    private final By frequentDetailsReorderAction = id("sevas.frequentdetails.reorder");
-    private final By bookingDetailsTitle = text("Booking Details");
+    // "Review & Pay".
+    private final By reviewTitle = text("Review & Pay");
+    private final By amountBreakdown = text("Amount Breakdown");
+    private final By totalAmount = text("Total Amount");
+    private final By proceedToPayment = AppiumBy.iOSNsPredicateString(
+            "type == 'XCUIElementTypeButton' AND label == 'Proceed to Payment'");
 
     public BookSevaPage(IOSDriver driver) {
         super(driver);
     }
 
+    // ---- Temple page ----
+
+    /** A temple short link (aikyam://p/<code>) resolves over the network first, so wait for the
+     * temple page itself before scrolling: swiping early scrolls whatever screen is still showing. */
     public boolean openSevasTab() {
-        return tapFirstVisible(sevasTabAction);
+        return (waitFor(Duration.ofSeconds(30), sevasTab) || scrollUntilVisible(sevasTab)) && tapFirstVisible(sevasTab);
     }
 
+    /** A bookable seva card: its Book button (scrolls the Sevas tab to find it). */
     public boolean isSevaCardVisible() {
-        return isAnyVisible(sevaCardBookAction, sevaCardDetailsAction);
-    }
-
-    public boolean tapCategoryChip(String category) {
-        return tapFirstVisible(text(category));
-    }
-
-    public boolean tapFirstSevaDetails() {
-        return tapFirstVisible(sevaCardDetailsAction);
+        return scrollUntilVisible(6, sevaCardBook);
     }
 
     public boolean tapFirstSevaBook() {
-        return tapFirstVisible(sevaCardBookAction);
+        return isSevaCardVisible() && tapFirstVisible(sevaCardBook);
     }
 
-    public boolean tapBookThisSeva() {
-        return tapFirstVisible(bookThisSevaAction);
+    public boolean tapFirstSevaDetails() {
+        return scrollUntilVisible(6, sevaCardDetails) && tapFirstVisible(sevaCardDetails);
     }
 
     public boolean isCatalogDetailsScreenVisible() {
-        return isAnyVisible(bookThisSevaAction);
+        return scrollUntilVisible(4, bookThisSeva);
     }
+
+    public boolean tapBookThisSeva() {
+        return isCatalogDetailsScreenVisible() && tapFirstVisible(bookThisSeva);
+    }
+
+    // ---- Booking form ----
 
     public boolean isBookingDetailsScreenVisible() {
-        return isAnyVisible(templeSectionLabel, selectedSevaLabel, dateOfSevaLabel, placeSevaOrderAction);
+        return isAnyVisible(formTitle, dateOfSevaLabel, placeSevaOrder);
     }
 
-    public boolean openDatePicker() {
-        return tapFirstVisible(selectDateAction);
-    }
-
-    /** Confirms whichever date SevaDatePickerSheet defaults to (the minimum bookable day)
-     * via its "OK" toolbar action - avoids manipulating the calendar grid via Appium. */
+    /** Opens the date sheet and confirms the date it starts on (the first bookable day). */
     public boolean confirmDefaultDate() {
-        if (!openDatePicker()) {
+        if (!(scrollBackUntilVisible(6, dateField, dateOfSevaLabel) && tapFirstVisible(dateField, dateOfSevaLabel))) {
             return false;
         }
-        return tapFirstVisible(datePickerOk, text("OK"));
+        WebElement ok;
+        try {
+            ok = waitForAnyVisible(datePickerOk);
+        } catch (RuntimeException noSheet) {
+            return false;
+        }
+        if (!ok.isEnabled()) {
+            // The first day is not offered for this seva; OK stays disabled. Close the sheet.
+            tapFirstVisible(AppiumBy.iOSNsPredicateString(
+                    "type == 'XCUIElementTypeButton' AND label == 'Cancel'"));
+            return false;
+        }
+        ok.click();
+        return waitUntilGone(datePickerOk);
     }
 
-    // iOS: SevaBookingView has no time slot field - the slot comes from the seva itself
-    // (see parity report).
-    public boolean isTimeSlotFieldVisible() {
-        return false;
+    /** Opens the date sheet and closes it with Cancel, leaving the form without a date. */
+    public boolean cancelDateSheet() {
+        if (!(scrollBackUntilVisible(6, dateField, dateOfSevaLabel) && tapFirstVisible(dateField, dateOfSevaLabel))) {
+            return false;
+        }
+        By cancel = AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeButton' AND label == 'Cancel'");
+        return tapFirstVisible(cancel) && waitUntilGone(datePickerOk);
     }
 
     public boolean isDevoteeDetailsVisible() {
-        return isAnyVisible(devoteeDetailsLabel, selectFamilyMembersLabel);
+        return scrollUntilVisible(6, devoteeDetailsLabel);
     }
 
-    public boolean isMemberCheckboxVisible(String name) {
-        return isAnyVisible(text(name));
-    }
-
-    /** Toggles a family member's checkbox: BookingDevoteeRowView lays out checkbox then
-     * name in one row, and every row shares the same ids, so pick the checkbox whose
-     * vertical center is closest to the name's. */
+    /** Ticks a devotee's checkbox: the Switch nearest the name's row (BookingDevoteeRowView lays
+     * out checkbox, then name and relationship). Tapping the name text does not toggle. */
     public boolean toggleDevotee(String name) {
-        WebElement nameElement = null;
-        for (WebElement candidate : visibleElements(devoteeName)) {
-            if (name.equals(candidate.getAttribute("label"))) {
-                nameElement = candidate;
-                break;
-            }
-        }
-        if (nameElement == null) {
+        By nameLabel = AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeStaticText' AND label == "
+                + predicateLiteral(name));
+        // Reading the count scrolls past the list, so the name may be above the viewport.
+        if (!(isVisibleNow(nameLabel) || scrollBackUntilVisible(6, nameLabel) || scrollUntilVisible(8, nameLabel))) {
             return false;
         }
-        int nameY = centerY(nameElement);
+        List<WebElement> names = visibleElements(nameLabel);
+        if (names.isEmpty()) {
+            return false;
+        }
+        Rectangle n = names.get(0).getRect();
+        int nameY = n.getY() + n.getHeight() / 2;
         WebElement best = null;
         int bestDistance = Integer.MAX_VALUE;
-        for (WebElement checkbox : visibleElements(devoteeCheckbox)) {
-            int distance = Math.abs(centerY(checkbox) - nameY);
-            if (distance < bestDistance) {
+        for (WebElement box : visibleElements(devoteeCheckbox)) {
+            Rectangle b = box.getRect();
+            int distance = Math.abs(b.getY() + b.getHeight() / 2 - nameY);
+            if (b.getX() < n.getX() && distance < bestDistance) {
                 bestDistance = distance;
-                best = checkbox;
+                best = box;
             }
         }
-        if (best == null) {
+        if (best == null || bestDistance > 40) {
             return false;
         }
-        try {
-            best.click();
-            return true;
-        } catch (RuntimeException exception) {
-            return false;
-        }
+        tapElementCenter(best);
+        return true;
     }
 
-    private static int centerY(WebElement element) {
-        return element.getLocation().getY() + element.getSize().getHeight() / 2;
-    }
-
-    public boolean tapAddFamilyMemberRow() {
-        return tapFirstVisible(addFamilyMemberRow);
-    }
-
-    /** Reads "Total number of devotees: N" and returns N, or -1 if unreadable. */
+    /** "Total number of devotees: N" -> N, or -1. */
     public int readTotalDevoteesCount() {
-        for (WebElement element : visibleElements(totalDevoteesLabel)) {
-            String value = element.getAttribute("label");
-            if (value == null) {
-                value = element.getText();
-            }
-            if (value == null) {
-                continue;
-            }
-            String digits = value.replaceAll("[^0-9]", "");
-            if (!digits.isBlank()) {
+        if (!scrollUntilVisible(8, totalDevotees)) {
+            return -1;
+        }
+        for (WebElement e : visibleElements(totalDevotees)) {
+            String digits = String.valueOf(e.getAttribute("label")).replaceAll("[^0-9]", "");
+            if (!digits.isEmpty()) {
                 return Integer.parseInt(digits);
             }
         }
         return -1;
     }
 
-    /** Only set by SevaBookingView.placeSevaOrder(), which the "Coming soon" gate on the
-     * Place Seva Order button currently makes unreachable on iOS. */
-    public boolean isDevoteeValidationErrorVisible() {
-        return isAnyVisible(devoteeValidationError);
-    }
-
-    /** See isDevoteeValidationErrorVisible(). The date field also shows this slot for the
-     * "connect to confirm today" clock-sync error. */
     public boolean isDateValidationErrorVisible() {
-        return isAnyVisible(dateValidationError);
+        return scrollBackUntilVisible(6, dateError) || scrollUntilVisible(6, dateError);
     }
 
-    /** Taps a Kanike/Hundi amount chip (BookSevaAmountChipsRow) - callers must pick amounts
-     * unique to the section being tested, since a value present in both rows would tap
-     * whichever chip comes first. */
+    public boolean isDevoteeValidationErrorVisible() {
+        return scrollBackUntilVisible(6, devoteeError) || scrollUntilVisible(6, devoteeError);
+    }
+
+    /** Kanike / Hundi chip by its exact label, e.g. "₹20". Buttons only: the footer's "Final Total ₹21"
+     * text can share the label. */
     public boolean tapAmountChip(int amount) {
-        return tapFirstVisible(text("₹" + amount));
+        By chip = AppiumBy.iOSNsPredicateString(
+                "type == 'XCUIElementTypeButton' AND label == " + predicateLiteral("₹" + amount));
+        return scrollUntilVisible(8, chip) && tapFirstVisible(chip);
+    }
+
+    /** Booking footer summary, e.g. "2 devotees • Seva (2 x ₹1) ₹2". */
+    public boolean isFooterTextVisible(String part) {
+        return isVisibleNow(textContains(part));
     }
 
     public boolean isFinalTotalVisible() {
-        return isAnyVisible(finalTotalLabel);
+        return scrollUntilVisible(6, totalAmount);
     }
 
+    /** Taps Place Seva Order. If the account already holds this seva on this date the app asks
+     * first; that prompt is accepted so the run can go on, and recorded: see wasDuplicatePromptShown()
+     * (TC917 asserts it). ponytail: repeated runs stack Held bookings on one date until their TTL. */
     public boolean tapPlaceSevaOrder() {
-        return tapFirstVisible(placeSevaOrderAction);
+        if (!tapFirstVisible(placeSevaOrder)) {
+            return false;
+        }
+        acceptDuplicatePromptIfShown();
+        return true;
     }
+
+    private void acceptDuplicatePromptIfShown() {
+        duplicatePromptShown = isVisibleNow(duplicateBookAgain);
+        if (duplicatePromptShown) {
+            tapFirstVisible(duplicateBookAgain);
+        }
+    }
+
+    /** Whether the last Place Seva Order tap raised the "already booked" prompt. */
+    public boolean wasDuplicatePromptShown() {
+        return duplicatePromptShown;
+    }
+
+    /** Two taps 50 ms apart in one W3C action: both land before the first submit disables the form. */
+    public boolean doubleTapPlaceSevaOrder() {
+        List<WebElement> buttons = visibleElements(placeSevaOrder);
+        if (buttons.isEmpty()) {
+            return false;
+        }
+        Rectangle r = buttons.get(0).getRect();
+        int x = r.getX() + r.getWidth() / 2;
+        int y = r.getY() + r.getHeight() / 2;
+        PointerInput finger = new PointerInput(PointerInput.Kind.TOUCH, "finger");
+        Sequence taps = new Sequence(finger, 1);
+        for (int i = 0; i < 2; i++) {
+            taps.addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), x, y));
+            taps.addAction(finger.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+            taps.addAction(new Pause(finger, Duration.ofMillis(50)));
+            taps.addAction(finger.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+            if (i == 0) {
+                taps.addAction(new Pause(finger, Duration.ofMillis(50)));
+            }
+        }
+        driver.perform(Collections.singletonList(taps));
+        acceptDuplicatePromptIfShown();
+        return true;
+    }
+
+    /** The order went out and the app moved on, or showed an alert explaining why not. */
+    public String readAlertMessage() {
+        List<WebElement> alerts = driver.findElements(AppiumBy.className("XCUIElementTypeAlert"));
+        if (alerts.isEmpty()) {
+            return null;
+        }
+        StringBuilder text = new StringBuilder();
+        for (WebElement t : alerts.get(0).findElements(AppiumBy.className("XCUIElementTypeStaticText"))) {
+            text.append(t.getAttribute("label")).append(' ');
+        }
+        return text.toString().trim();
+    }
+
+    public boolean dismissAlert() {
+        List<WebElement> alerts = driver.findElements(AppiumBy.className("XCUIElementTypeAlert"));
+        if (alerts.isEmpty()) {
+            return false;
+        }
+        List<WebElement> buttons = alerts.get(0).findElements(AppiumBy.className("XCUIElementTypeButton"));
+        if (buttons.isEmpty()) {
+            return false;
+        }
+        buttons.get(0).click();
+        return true;
+    }
+
+    public boolean isAlertVisible() {
+        return isAnyVisible(AppiumBy.className("XCUIElementTypeAlert"));
+    }
+
+    // ---- Review & Pay ----
 
     public boolean waitForPaymentReviewScreen() {
+        return isAnyVisible(reviewTitle, amountBreakdown, proceedToPayment)
+                || waitFor(Duration.ofSeconds(20), reviewTitle, amountBreakdown, proceedToPayment);
+    }
+
+    /** For "must NOT be on Review & Pay" checks: looks once (~2 s) instead of waiting ~28 s. */
+    public boolean isPaymentReviewVisibleNow() {
+        return isVisibleNow(reviewTitle, amountBreakdown, proceedToPayment);
+    }
+
+    /** WebDriverWait rather than a hand loop: a dead session throws at once instead of spinning out the timeout. */
+    private boolean waitFor(Duration timeout, By... locators) {
         try {
-            waitForAnyVisible(proceedToPaymentAction, amountBreakdownLabel);
-            return true;
-        } catch (RuntimeException exception) {
+            return new WebDriverWait(driver, timeout)
+                    .ignoring(StaleElementReferenceException.class)
+                    .until(d -> {
+                        for (By locator : locators) {
+                            for (WebElement e : d.findElements(locator)) {
+                                if (e.isDisplayed()) {
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    });
+        } catch (TimeoutException notShown) {
             return false;
         }
     }
 
     public boolean isAmountBreakdownVisible() {
-        return isAnyVisible(amountBreakdownLabel);
+        return scrollUntilVisible(6, amountBreakdown);
     }
 
-    /** Visibility/enabled check ONLY - see class comment. Never tapped anywhere. */
     public boolean isProceedToPaymentEnabled() {
-        try {
-            WebElement button = waitForAnyVisible(proceedToPaymentAction);
-            return button.isEnabled();
-        } catch (RuntimeException exception) {
+        if (!scrollUntilVisible(8, proceedToPayment)) {
             return false;
+        }
+        List<WebElement> buttons = visibleElements(proceedToPayment);
+        return !buttons.isEmpty() && buttons.get(0).isEnabled();
+    }
+
+    /** The amount on the "Total Amount" row: the ₹ value whose vertical centre is inside the row. */
+    public BigDecimal readFinalTotal() {
+        if (!scrollUntilVisible(6, totalAmount)) {
+            return null;
+        }
+        List<WebElement> labels = visibleElements(totalAmount);
+        Rectangle row = labels.get(labels.size() - 1).getRect();
+        for (WebElement e : visibleElements(textContains("₹"))) {
+            String v = e.getAttribute("label");
+            Rectangle r = e.getRect();
+            int centre = r.getY() + r.getHeight() / 2;
+            if (v != null && v.trim().matches("₹\\s?[0-9,]+(\\.[0-9]{1,2})?")
+                    && Math.abs(centre - (row.getY() + row.getHeight() / 2)) <= row.getHeight()) {
+                return new BigDecimal(v.replaceAll("[^0-9.]", ""));
+            }
+        }
+        return null;
+    }
+
+    /** Leaves Review & Pay with the screen's back control. True once it is gone. */
+    public boolean cancelPaymentReview() {
+        if (!isVisibleNow(reviewTitle, amountBreakdown, proceedToPayment)) {
+            return false;
+        }
+        navigateBack();
+        return waitUntilGone(Duration.ofSeconds(10), reviewTitle, proceedToPayment);
+    }
+
+    /**
+     * The only way a test may tap "Proceed to Payment". Refuses unless the run set
+     * -Daikyam.payu.testMode=true AND the dev build is in front: the dev build talks to PayU's
+     * test environment (PaymentViewModel: .development -> .test); the prod app charges real cards.
+     */
+    public boolean tapProceedToPaymentInPayUTestMode() {
+        if (!isPayUTestModeEnabled()) {
+            throw new IllegalStateException("Refusing to open PayU: run with -Daikyam.payu.testMode=true on the dev build");
+        }
+        String front = foregroundBundleId();
+        if (!PAYU_TEST_BUNDLE_ID.equals(front)) {
+            throw new IllegalStateException("Refusing to open PayU: foreground app is " + front
+                    + ", not the dev build " + PAYU_TEST_BUNDLE_ID);
+        }
+        // PayU is recognised from a screenshot (SevaPaymentPage.payUState); in dark mode Review & Pay
+        // looks like PayU, so the run must be in light mode before PayU can open.
+        if (!new SevaPaymentPage(driver).forceLightMode()) {
+            throw new IllegalStateException("Refusing to open PayU: could not switch the phone to light mode");
+        }
+        if (!(scrollUntilVisible(8, proceedToPayment) && tapFirstVisible(proceedToPayment))) {
+            return false;
+        }
+        payUOpened = true;
+        return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String foregroundBundleId() {
+        try {
+            Object info = driver.executeScript("mobile: activeAppInfo");
+            return String.valueOf(((Map<String, Object>) info).get("bundleId"));
+        } catch (RuntimeException e) {
+            return "unknown";
         }
     }
 
-    /** Backs out of Payment Review without ever tapping Proceed to Payment. */
-    public boolean cancelPaymentReview() {
-        return tapFirstVisible(paymentReviewBack) || navigateBack();
+    public static boolean isPayUTestModeEnabled() {
+        return Boolean.getBoolean("aikyam.payu.testMode");
     }
 
-    // ---- Hundi Donation ----
-
-    /** Best-effort: the "Hundi" button is not guaranteed present (and is hidden on iOS
-     * while SevasView's quick actions are gated off). Returns false if none found after
-     * scrolling, letting callers skip rather than fail. */
-    public boolean openHundiFromSevaList() {
-        return scrollUntilVisible(hundiEntryAction) && tapFirstVisible(hundiEntryAction);
-    }
-
-    public boolean isHundiScreenVisible() {
-        return isAnyVisible(hundiScreenTitle, hundiAmountField);
-    }
-
-    public boolean enterHundiAmount(String amount) {
-        return typeIntoFieldAtIndex(hundiAmountField, 0, amount);
-    }
-
-    public boolean enterHundiPersonName(String name) {
-        return typeIntoFieldAtIndex(hundiTextField, 1, name);
-    }
-
-    public boolean isHundiDonateActionVisible() {
-        return isAnyVisible(hundiDonateAction);
-    }
-
-    /** Only ever called with invalid data (e.g. amount 0) - real client-side
-     * validation blocks the screen from advancing, so this never risks reaching
-     * Payment. Never call this after entering valid data. */
-    public boolean tapHundiDonate() {
-        hideKeyboardIfShown();
-        return tapFirstVisible(hundiDonateAction);
-    }
-
-    public boolean isHundiInvalidAmountErrorVisible() {
-        return isAnyVisible(hundiInvalidAmountError);
-    }
-
-    public boolean isHundiAmountRequiredErrorVisible() {
-        return isAnyVisible(hundiAmountRequiredError);
-    }
-
-    public boolean navigateBackFromHundi() {
-        hideKeyboardIfShown();
-        return tapFirstVisible(hundiBack) || navigateBack();
-    }
-
-    // ---- Frequent seva / Reorder ----
-
-    /** Best-effort: this section only renders when the account has past frequent
-     * sevas - not guaranteed present on a fresh account. Returns false (skip, not
-     * fail) if not found. */
-    public boolean isFrequentSevasSectionVisible() {
-        return scrollUntilVisible(frequentSevasSectionHeader);
-    }
-
-    public boolean openFirstFrequentOrderDetails() {
-        return scrollUntilVisible(frequentDetailsAction) && tapFirstVisible(frequentDetailsAction);
-    }
-
-    public boolean isBookingDetailsScreenTitleVisible() {
-        return isAnyVisible(bookingDetailsTitle);
-    }
-
-    public boolean isReorderActionVisible() {
-        return isAnyVisible(frequentDetailsReorderAction, frequentReorderAction);
-    }
-
-    /** Reorder starts a brand-new booking pre-filled with the previous order's
-     * temple/seva/priest, landing on the same Booking Details screen already covered
-     * by isBookingDetailsScreenVisible()/tapBookThisSeva() flows above. */
-    public boolean tapReorderFromFrequentOrderDetails() {
-        return tapFirstVisible(frequentDetailsReorderAction, frequentReorderAction);
+    /** Test cleanup: leaves PayU / Review & Pay if a test stopped inside them. Never throws. */
+    public void leavePaymentFlowIfOpen() {
+        try {
+            SevaPaymentPage pay = new SevaPaymentPage(driver);
+            if (payUOpened && pay.isPayUOnScreen()) {
+                pay.cancelPayU();
+            }
+            payUOpened = false;
+            for (int i = 0; i < 3 && isVisibleNow(reviewTitle, proceedToPayment, textContains("Net Banking")); i++) {
+                navigateBack();
+                if (isVisibleNow(text("Yes"), textContains("YES"))) {
+                    tapFirstVisible(text("Yes"), textContains("YES"));
+                }
+            }
+            if (isVisibleNow(AppiumBy.className("XCUIElementTypeAlert"))) {
+                dismissAlert();
+            }
+        } catch (RuntimeException ignored) {
+            // Best effort; BaseTest resets to Home before the next test.
+        }
     }
 }
